@@ -1,215 +1,262 @@
-# Guidance Title (required)
+# Guidance for Migrating Apache Iceberg Data from Amazon S3 to S3 Tables
+
+## Table of Contents
+1. [Introduction](#introduction)
+2. [Solution Overview](#solution-overview)
+3. [Costs](#costs)
+4. [Deployment options](#deployment-options)
+5. [Deployment steps](#deployment-steps)
+6. [Post deployment steps](#post-deployment-steps)
+7. [Undeployment steps](#undeployment-steps) 
+8. [Customer responsibility](#customer-responsibility)
+9. [Feedback](#feedback)
+10. [Notices](#notices)
+
+---
+
+<a name="introduction"></a>
+## Introduction
+
+This user guide is created for anyone who is interested in Migrating Apache Iceberg Data to [Amazon S3 Tables](https://https://aws.amazon.com/s3/features/tables/). This solution sets up an automated migration solution for moving data from an existing [Amazon S3](https://aws.amazon.com/s3/) bucket and [AWS Glue Table](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-glue-table.html) to an Amazon S3 Tables Bucket using [AWS Step Functions](https://aws.amazon.com/step-functions/) and [Amazon EMR](https://aws.amazon.com/emr/) with [Apache Spark](https://spark.apache.org/). 
+
+<a name="core-concepts"></a>
+## Core Concepts
+Below is a high-level overview of the Core Services that are incorporated into Migrating Apache Iceberg Data from Amazon S3 to S3 Tables. We will assume the reader is familiar with Git, Python, and AWS.
+
+| Service | Description |
+|---------|-------------|
+| [AWS CloudFormation](https://aws.amazon.com/cloudformation/) | Speed up cloud provisioning with infrastructure as code. |
+| [Amazon S3](https://aws.amazon.com/s3/) | Object storage built to retrieve any amount of data from anywhere. |
+| [Amazon S3 Tables](https://https://aws.amazon.com/s3/features/tables/) | Amazon S3 Tables deliver the first cloud object store with built-in Apache Iceberg support and streamline storing tabular data at scale. |
+| [AWS Lambda](https://aws.amazon.com/lambda/) | Serverless compute service that runs code in response to events and automatically manages the compute resources, enabling developers to build applications that scale with business needs. |
+| [AWS Step Functions](https://aws.amazon.com/step-functions/) | Orchestrate multiple AWS services into serverless workflows. |
+| [Amazon Simple Notification Service](https://aws.amazon.com/pm/sns) | Fully managed pub/sub messaging, SMS, email, and mobile push notifications. |
+| [Amazon Identity and Access Management](https://aws.amazon.com/iam) | Securely manage identities and access to AWS services and resources. |
+
+---
 
-The Guidance title should be consistent with the title established first in Alchemy.
+<a name="solution-overview"></a>
+## Solution Overview
+AWS CloudFormation deploys resources including AWS Lambda, AWS IAM, custom resources and an AWS Step Function with a PySpark Script. AWS Lambda then verifies the existence of source S3 Buckets and Glue Table, and if they exist will create a S3 bucket for EMR log retention. The user manually invokes the EMREC2StateMachine task from the Step Function to orchestrate EMR cluster creation and Apache Spark job execution. The Apache Spark job then runs on the EMR cluster, using CTAS (Create Table As Select) to migration the source data to the target S3 Tables Bucket.
 
-**Example:** *Guidance for Product Substitutions on AWS*
+Upon completion, the Step Function send an email via SNS to the user that the workflow has completed, and the EMR Cluster is then terminated by the EMREC2StateMachine Step Function task.
 
-This title correlates exactly to the Guidance it’s linked to, including its corresponding sample code repository. 
+![Architecture Diagram](./images/ra.png) 
 
+<p align="center">
+<em>Figure 1. Migrating Apache Iceberg Data from Amazon S3 to S3 Tables Reference Architecture.</em>
+</p>
 
-## Table of Contents (required)
+<p align="center">
+<img src="./images/s3tables-migration-workflow.png" alt="AWS Step Functions Flow Chart">
+</p>
+
+<p align="center">
+<em>Figure 2. AWS Step Functions Flow Chart.</em>
+</p>
+
+<a name="costs"></a>
+## Costs
+## Costs and Licenses
+While utilizing this guidance sample code doesn't incur any direct charges, please be aware that you will incur costs for the AWS services or resources activated by this guidance architecture. The cost will vary based upon the amount of data that requires migration, number of objects, and the size of the EMR cluster creation.
+
+In this cost example, we examine the cost over a month for a 1TiB S3 Bucket migration with updates creating 1,000 new data files with an average object size of 5 MB and 3 metadata files with an average object size of 10 K. The table users frequently perform queries on the data-set and generate 500,000 GET requests per month. To optimize query performance, automatic compaction is enabled. In addition we are including the cost of a Small EMR Cluster option, detailed below in deployment costs, for the duration of the migration.
+
+### Example Costs
+
+You are responsible for the cost of the AWS services used while running this solution. As of December 2024, the cost for running this solution with the small Implementation of EMR in US West-2 (US Oregon) Region is approximately **\$ 45.68 per month**, assuming **1 TiB of Data and 1,000 Objects are migrated**.
+
+This guidance uses [Serverless services](https://aws.amazon.com/serverless/), which use a on-demand billing model - costs are incurred with usage of the deployed resources. Refer to the [Sample cost table](#sample-cost-table) for a service-by-service cost breakdown.
+
+We recommend creating a [budget](https://alpha-docs-aws.amazon.com/awsaccountbilling/latest/aboutv2/budgets-create.html) through [AWS Cost Explorer](http://aws.amazon.com/aws-cost-management/aws-cost-explorer/) to help manage costs. Prices are subject to change. For full details, refer to the pricing webpage for each AWS service used in this guidance.
+
+#### Sample cost table
+
+The following table provides a sample cost breakdown for deploying this guidance with the default parameters in the `us-east-2` (US Oregon) Region for one month assuming "non-production" level volume of uploaded files.
+
+| Cost Component                      | Calculation                                                | Cost     |
+|----------------------------------------|------------------------------------------------------------|---------:|
+| Free Tier Eligible | | | 
+| - AWS Step Functions                      | 7 state transitions                    | $0.00    |
+| - Amazon SNS                                 | 5 notifications                        | $0.00    |
+| - AWS Lambda                              | Custom resource functions              | $0.00    |
+| - Amazon IAM                                 | IAM roles and policies                               | $0.00    |
+| Amazon EMR Cluster (3 hours)               |                                                            |          |
+| - m6gd.4xlarge (Primary)            | $0.9664/hour * 3 hours                                     | $2.87    |
+| - i3.4xlarge (Core)                 | $1.248/hour * 3 hours                                      | $3.74    |
+| - i3.4xlarge (Task)                 | $1.248/hour * 3 hours                                      | $3.74    |
+| - EMR Service Fee                     | $0.015/hour/instance * 3 instances * 3 hours               | $0.14    |
+| Amazon S3 | | | 
+| - S3 Tables Storage (Monthly)         | 1,024 GB * $0.0265/GB                                      | $27.14   |
+| - S3 Tables PUT Requests              | 30,090 requests * $0.005/1,000 requests                    | $0.15    |
+| - S3 Tables GET Requests              | 500,000 requests * $0.0004/1,000 requests                  | $0.20    |
+| - S3 Tables Object Monitoring         | 10,486 objects * $0.025/1,000 objects                      | $0.26    |
+| - S3 Tables Compaction (Objects)      | 30,000 objects * $0.004/1,000 objects                      | $0.12    |
+| - S3 Tables Compaction (Data)         | 146.48 GB * $0.05/GB                                       | $7.32    |
+| **Total Cost**                      |                                                            | **$45.68**|
+
+### Assumptions and Notes:
+- EMR Cluster runs for 3 hours for the migration job
+- EC2 instance prices are based on US West-2 (US Oregon) region, On-Demand pricing
+- EMR pricing includes EC2 instance cost plus a service fee
+- S3 Tables costs are calculated on a monthly basis as per the previous scenario
+- The total cost includes both the one-time migration cost (EMR) and the first month of S3 Tables usage
+- Actual costs may vary based on region, specific data patterns, and any additional AWS services used
 
-List the top-level sections of the README template, along with a hyperlink to the specific section.
+<a name="deployment-options"></a>
+
+## Deployment Options
 
-### Required
+- Click on the following link for a Console Launch via  [![Cloud Formation Template](./images/cf_button.png)]() **Need link @tjm
+- Launch via [AWS CloudShell](https://aws.amazon.com/cloudshell/)
+---
+
+Provide below is the list of EMR Clusters that are deployable from the CloudFormation template. This decision is based off of the organization requirements.
+
+### EMR Cluster Sizes
 
-1. [Overview](#overview-required)
-    - [Cost](#cost)
-2. [Prerequisites](#prerequisites-required)
-    - [Operating System](#operating-system-required)
-3. [Deployment Steps](#deployment-steps-required)
-4. [Deployment Validation](#deployment-validation-required)
-5. [Running the Guidance](#running-the-guidance-required)
-6. [Next Steps](#next-steps-required)
-7. [Cleanup](#cleanup-required)
+| Size   | Primary Instance            | Core Instances              | Task Instances              |
+|--------|-----------------------------|-----------------------------|----------------------------|
+| Small  | 1 x m6gd.4xlarge            | 1 x i3.4xlarge              | 1 x i3.4xlarge              |
+| Medium | 1 x m5.4xlarge              | 4 x i3.4xlarge              | 4 x i3.4xlarge              |
+| Large  | 3 x r5.4xlarge              | 4 x i3.4xlarge              | 8 x i3.4xlarge              |
+| XLarge | 3 x r5.4xlarge              | 8 x i3.4xlarge              | 12 x i3.4xlarge             |
 
-***Optional***
+### Cluster Performance Configuration
+
+| Size   | Executor Memory | Executor Cores | Driver Memory | Driver Cores | Min Executors | Max Executors |
+|--------|-----------------|----------------|---------------|--------------|---------------|---------------|
+| Small  | 24G             | 4              | 24G           | 4            | 2             | 7             |
+| Medium | 24G             | 4              | 24G           | 4            | 8             | 29            |
+| Large  | 24G             | 3              | 32G           | 4            | 12            | 44            |
+| XLarge | 28G             | 4              | 48G           | 4            | 20            | 74            |
 
-8. [FAQ, known issues, additional considerations, and limitations](#faq-known-issues-additional-considerations-and-limitations-optional)
-9. [Revisions](#revisions-optional)
-10. [Notices](#notices-optional)
-11. [Authors](#authors-optional)
 
-## Overview (required)
+<a name="deployment-steps"></a>
 
-1. Provide a brief overview explaining the what, why, or how of your Guidance. You can answer any one of the following to help you write this:
+## Deployment Steps
 
-    - **Why did you build this Guidance?**
-    - **What problem does this Guidance solve?**
+### AWS CloudShell Deployment Steps
 
-2. Include the architecture diagram image, as well as the steps explaining the high-level overview and flow of the architecture. 
-    - To add a screenshot, create an ‘assets/images’ folder in your repository and upload your screenshot to it. Then, using the relative file path, add it to your README. 
+** Need updated gitrepo - @tjm
 
-### Cost ( required )
+1. **Clone sample code GitHub repository using the following command:**
+```
+$ git clone https://github.com/aws-solutions-library-samples/guidance-for-migrating-apache-iceberg-data-from-s3-to-s3-tables.git
+Cloning into 'guidance-for-migrating-apache-iceberg-data-from-s3-to-s3-tables'...
+remote: Enumerating objects: 29, done.
+remote: Counting objects: 100% (29/29), done.
+remote: Compressing objects: 100% (20/20), done.
+remote: Total 29 (delta 10), reused 26 (delta 9), pack-reused 0 (from 0)
+Receiving objects: 100% (29/29), 14.22 KiB | 2.84 MiB/s, done.
+Resolving deltas: 100% (10/10), done.
+```
 
-This section is for a high-level cost estimate. Think of a likely straightforward scenario with reasonable assumptions based on the problem the Guidance is trying to solve. Provide an in-depth cost breakdown table in this section below ( you should use AWS Pricing Calculator to generate cost breakdown ).
+2. **Change directory to the src subdirectory located at 'guidance-for-migrating-apache-iceberg-data-from-s3-to-s3-tables/src':**
+```
+cd guidance-for-migrating-apache-iceberg-data-from-s3-to-s3-tables/src
+```
 
-Start this section with the following boilerplate text:
+3. **Define the following Parameters for CloudFormation**
 
-_You are responsible for the cost of the AWS services used while running this Guidance. As of <month> <year>, the cost for running this Guidance with the default settings in the <Default AWS Region (Most likely will be US East (N. Virginia)) > is approximately $<n.nn> per month for processing ( <nnnnn> records )._
+### Source Data
+| Parameter | Description |
+|-----------|-------------|
+| `YourS3Bucket` | Source S3 bucket containing the data to migrate |
+| `YourExistingGlueDatabase` | Source Glue database name |
+| `YourExistingGlueTable` | Source Glue table name |
 
-Replace this amount with the approximate cost for running your Guidance in the default Region. This estimate should be per month and for processing/serving resonable number of requests/entities.
+### Source Partitioning (Optional)
+| Parameter | Description |
+|-----------|-------------|
+| `YourExistingGlueTablePartitionName` | Source table partition name |
+| `YourExistingGlueTablePartitionValue` | Source table partition value |
 
-Suggest you keep this boilerplate text:
-_We recommend creating a [Budget](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-managing-costs.html) through [AWS Cost Explorer](https://aws.amazon.com/aws-cost-management/aws-cost-explorer/) to help manage costs. Prices are subject to change. For full details, refer to the pricing webpage for each AWS service used in this Guidance._
+### Destination
+| Parameter | Description |
+|-----------|-------------|
+| `S3TableBucket` | Destination S3 Tables Bucket ARN |
+| `S3TableBucketNamespace` | Destination S3 Tables namespace/database |
+| `S3TableBucketTables` | Destination S3 Tables table name |
 
-### Sample Cost Table ( required )
+> **Note**: Ensure all required parameters are correctly set before initiating the migration process.
 
-**Note : Once you have created a sample cost table using AWS Pricing Calculator, copy the cost breakdown to below table and upload a PDF of the cost estimation on BuilderSpace. Do not add the link to the pricing calculator in the ReadMe.**
+---
+4. **Launch CloudFormation template from CLI:**
+```
+aws cloudformation create-stack --stack-name s3TablesMigration --template-body file://automated-migration-to-s3-tables-latest.yaml --capabilities CAPABILITY_NAMED_IAM
+```
+---
 
-The following table provides a sample cost breakdown for deploying this Guidance with the default parameters in the US East (N. Virginia) Region for one month.
+## Post Deployment Steps
 
-| AWS service  | Dimensions | Cost [USD] |
-| ----------- | ------------ | ------------ |
-| Amazon API Gateway | 1,000,000 REST API calls per month  | $ 3.50month |
-| Amazon Cognito | 1,000 active users per month without advanced security feature | $ 0.00 |
+### 1. Confirm SNS Subscription
+- Remember to confirm the SNS subscription to the e-mail address selected.
 
-## Prerequisites (required)
+### 2. Upload PySpark Script
+- Go to Stack Resources and locate the solution EMR log Bucket
+- Upload the PySpark script from the repo to:
 
-### Operating System (required)
+> resources/script/mys3tablespysparkscript.py
 
-- Talk about the base Operating System (OS) and environment that can be used to run or deploy this Guidance, such as *Mac, Linux, or Windows*. Include all installable packages or modules required for the deployment. 
-- By default, assume Amazon Linux 2/Amazon Linux 2023 AMI as the base environment. All packages that are not available by default in AMI must be listed out.  Include the specific version number of the package or module.
+### 3. Start Step Function Execution
+- In Stack Resources, find and click on "EMREC2StateMachine" link
+- At the Step Function summary section:
+1. Click "Start Execution"
+2. Enter `{}` as the input
+3. Begin the workflow
 
-**Example:**
-“These deployment instructions are optimized to best work on **<Amazon Linux 2 AMI>**.  Deployment in another OS may require additional steps.”
+### 4. Monitor the Process
+Choose one of these methods to monitor:
+- Step Function Console
+- EMR Management Console
 
-- Include install commands for packages, if applicable.
+> **Tip:** Keep an eye on the SNS notifications for important updates about the migration process.
 
+---
+<a name="undeployment-steps"></a>
+## Undeployment Steps
+In order to un-deploy the guidance code from your AWS account, the following steps have to be made:
 
-### Third-party tools (If applicable)
+1. Through the AWS Manager console, you can navigate to CloudFormation in the console, choose the stack as named at deployment, and choose Delete.
 
-*List any installable third-party tools required for deployment.*
+2. Though the AWS Console execute the following command:
+```
+aws cloudformation delete-stack --stack-name s3TablesMigration
+```
+Or if you have named the stack something else, replace "s3TablesMigration" with that stack name.
 
+**Once deleted, the resources associated with the migration solution are no longer available, but the S3 Tables data is retained.**
 
-### AWS account requirements (If applicable)
+---
 
-*List out pre-requisites required on the AWS account if applicable, this includes enabling AWS regions, requiring ACM certificate.*
+<a name="customer-responsibility"></a>
+## Customer Responsibility
+Upon deploying the guidance, ensure that all your resources and services are up-to-date and appropriately configured. This includes the application of necessary patches to align with your security requirements and other specifications. For a comprehensive understanding of the roles and responsibilities in maintaining security, please consult the [AWS Shared Responsibility Model](https://aws.amazon.com/compliance/shared-responsibility-model).
 
-**Example:** “This deployment requires you have public ACM certificate available in your AWS account”
+---
+<a name="feedback"></a>
+## Feedback
 
-**Example resources:**
-- ACM certificate 
-- DNS record
-- S3 bucket
-- VPC
-- IAM role with specific permissions
-- Enabling a Region or service etc.
+To submit feature ideas and report bugs, use the [Issues section of the GitHub repository](https://github.com/aws-solutions-library-samples/guidance-for-migrating-apache-iceberg-data-from-s3-to-s3-tables/issues) for this guidance.
 
+---
+<a name="notices"></a>
+## Notices
 
-### aws cdk bootstrap (if sample code has aws-cdk)
+This document is provided for informational purposes only. It represents current AWS product offerings and practices as of the date of issue of this document, which are subject to change without notice. Customers are responsible for making their own independent assessment of the information in this document and any use of AWS products or services, each of which is provided "as is" without warranty of any kind, whether expressed or implied. This document does not create any warranties, representations, contractual commitments, conditions, or assurances from AWS, its affiliates, suppliers, or licensors. The responsibilities and liabilities of AWS to its customers are controlled by AWS agreements, and this document is not part of, nor does it modify, any agreement between AWS and its customers.
 
-<If using aws-cdk, include steps for account bootstrap for new cdk users.>
+The software included with this guidance is licensed under the MIT License, version 2.0 (the "License"). ermission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-**Example blurb:** “This Guidance uses aws-cdk. If you are using aws-cdk for first time, please perform the below bootstrapping....”
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
 
-### Service limits  (if applicable)
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 
-<Talk about any critical service limits that affect the regular functioning of the Guidance. If the Guidance requires service limit increase, include the service name, limit name and link to the service quotas page.>
-
-### Supported Regions (if applicable)
-
-<If the Guidance is built for specific AWS Regions, or if the services used in the Guidance do not support all Regions, please specify the Region this Guidance is best suited for>
-
-
-## Deployment Steps (required)
-
-Deployment steps must be numbered, comprehensive, and usable to customers at any level of AWS expertise. The steps must include the precise commands to run, and describe the action it performs.
-
-* All steps must be numbered.
-* If the step requires manual actions from the AWS console, include a screenshot if possible.
-* The steps must start with the following command to clone the repo. ```git clone xxxxxxx```
-* If applicable, provide instructions to create the Python virtual environment, and installing the packages using ```requirement.txt```.
-* If applicable, provide instructions to capture the deployed resource ARN or ID using the CLI command (recommended), or console action.
-
- 
-**Example:**
-
-1. Clone the repo using command ```git clone xxxxxxxxxx```
-2. cd to the repo folder ```cd <repo-name>```
-3. Install packages in requirements using command ```pip install requirement.txt```
-4. Edit content of **file-name** and replace **s3-bucket** with the bucket name in your account.
-5. Run this command to deploy the stack ```cdk deploy``` 
-6. Capture the domain name created by running this CLI command ```aws apigateway ............```
-
-
-
-## Deployment Validation  (required)
-
-<Provide steps to validate a successful deployment, such as terminal output, verifying that the resource is created, status of the CloudFormation template, etc.>
-
-
-**Examples:**
-
-* Open CloudFormation console and verify the status of the template with the name starting with xxxxxx.
-* If deployment is successful, you should see an active database instance with the name starting with <xxxxx> in        the RDS console.
-*  Run the following CLI command to validate the deployment: ```aws cloudformation describe xxxxxxxxxxxxx```
-
-
-
-## Running the Guidance (required)
-
-<Provide instructions to run the Guidance with the sample data or input provided, and interpret the output received.> 
-
-This section should include:
-
-* Guidance inputs
-* Commands to run
-* Expected output (provide screenshot if possible)
-* Output description
-
-
-
-## Next Steps (required)
-
-Provide suggestions and recommendations about how customers can modify the parameters and the components of the Guidance to further enhance it according to their requirements.
-
-
-## Cleanup (required)
-
-- Include detailed instructions, commands, and console actions to delete the deployed Guidance.
-- If the Guidance requires manual deletion of resources, such as the content of an S3 bucket, please specify.
-
-
-
-## FAQ, known issues, additional considerations, and limitations (optional)
-
-
-**Known issues (optional)**
-
-<If there are common known issues, or errors that can occur during the Guidance deployment, describe the issue and resolution steps here>
-
-
-**Additional considerations (if applicable)**
-
-<Include considerations the customer must know while using the Guidance, such as anti-patterns, or billing considerations.>
-
-**Examples:**
-
-- “This Guidance creates a public AWS bucket required for the use-case.”
-- “This Guidance created an Amazon SageMaker notebook that is billed per hour irrespective of usage.”
-- “This Guidance creates unauthenticated public API endpoints.”
-
-
-Provide a link to the *GitHub issues page* for users to provide feedback.
-
-
-**Example:** *“For any feedback, questions, or suggestions, please use the issues tab under this repo.”*
-
-## Revisions (optional)
-
-Document all notable changes to this project.
-
-Consider formatting this section based on Keep a Changelog, and adhering to Semantic Versioning.
-
-## Notices (optional)
-
-Include a legal disclaimer
-
-**Example:**
-*Customers are responsible for making their own independent assessment of the information in this Guidance. This Guidance: (a) is for informational purposes only, (b) represents AWS current product offerings and practices, which are subject to change without notice, and (c) does not create any commitments or assurances from AWS and its affiliates, suppliers or licensors. AWS products or services are provided “as is” without warranties, representations, or conditions of any kind, whether express or implied. AWS responsibilities and liabilities to its customers are controlled by AWS agreements, and this Guidance is not part of, nor does it modify, any agreement between AWS and its customers.*
-
-
-## Authors (optional)
-
-Name of code contributors
+---

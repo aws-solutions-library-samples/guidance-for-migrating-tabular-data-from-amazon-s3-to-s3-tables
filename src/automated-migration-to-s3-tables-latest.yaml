@@ -1,0 +1,1468 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: An Amazon S3 Tables Bucket Migration Solution.
+Metadata:
+  Version: '1.0.0'
+  License:
+    Description: >-
+      'MIT No Attribution
+
+      Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+      Permission is hereby granted, free of charge, to any person obtaining a copy of
+      this software and associated documentation files (the "Software"), to deal in
+      the Software without restriction, including without limitation the rights to
+      use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+      the Software, and to permit persons to whom the Software is furnished to do so.
+
+      THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+      IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+      FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+      COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+      IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+      CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.'
+
+
+  AWS::CloudFormation::Interface:
+
+    ParameterGroups:
+
+      -
+        Label:
+          default: "Existing Data, Database and Table details"
+        Parameters:
+          - YourS3Bucket
+          - YourExistingGlueDatabase
+          - YourExistingGlueTable      
+          - YourExistingGlueTablePartitionName
+          - YourExistingGlueTablePartitionValue       
+
+
+      -
+        Label:
+          default: "Destination S3 Tables Bucket ARN, Namespace, Table and Table Partitions"
+        Parameters:
+          - S3TableBucket
+          - S3TableBucketNamespace
+          - S3TableBucketTables
+          - S3TableBucketTablesPartitions
+
+      -
+        Label:
+          default: "Please choose your desired Migration Type"
+        Parameters:
+          - MigrationType
+
+         
+      -
+        Label:
+          default: "Job Notification and Tracking"
+        Parameters:
+          - RecipientEmail
+                       
+      -
+        Label:
+          default: "EMR Cluster Performance"
+        Parameters:
+          - ClusterSize
+
+
+    ParameterLabels:
+      YourS3Bucket:
+        default: "The Source S3 Bucket Containing your data files"
+      S3TableBucket:
+        default: "Your destinations S3 Tables Bucket ARN"
+
+
+Parameters:
+
+  YourS3Bucket:
+    Description: Please enter the name of the bucket containing the data you want to migrate
+    Type: String
+    AllowedPattern: '^[a-z0-9.-]{3,63}$'
+    ConstraintDescription: Bucket name must contain only lowercase letters, numbers, periods (.), and dashes (-). Visit Amazon S3 User Guide 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html' 
+
+
+  YourExistingGlueTablePartitionName:
+    Description: Please specify the existing Table partition Name you want to migrate. Leave the predefined value to migrate the entire table
+    Type: String
+    MinLength: '1'
+    MaxLength: '1024'    
+    Default: NotApplicable
+
+  YourExistingGlueTablePartitionValue:
+    Description: Please specify the existing Table partition Value you want to migrate. Leave the predefined value to migrate the entire table
+    Type: String
+    MinLength: '1'
+    MaxLength: '1024'      
+    Default: NotApplicable 
+
+  
+  S3TableBucket:
+    Description: Please enter the ARN of your S3 Tables Bucket
+    Type: String
+    MinLength: '3'
+    ConstraintDescription: Please provide your desired valid S3Tables Bucket ARN
+    AllowedPattern: '(arn:aws[-a-z0-9]*:[a-z0-9]+:[-a-z0-9]*:[0-9]{12}:bucket/[a-z0-9_-]{3,63})'
+
+
+  S3TableBucketNamespace:
+    Description: Please specify the S3Tables Namespace or Database where your data will be stored in your Amazon S3 Tables Bucket
+    Type: String
+    MinLength: '0'
+    MaxLength: '1024'    
+    ConstraintDescription: Please provide your desired S3Tables Bucket namespace
+    AllowedPattern: '[0-9a-z_]*'
+
+   
+
+  S3TableBucketTables:
+    Description: Please enter your desired S3 Tables Table Name
+    Type: String
+    MinLength: '3'
+    MaxLength: '63'  
+    ConstraintDescription: Please provide your Existing S3Tables Bucket ARN
+    AllowedPattern: '[0-9a-z_]*'
+
+
+  S3TableBucketTablesPartitions:
+    Description: Please enter your desired S3 Tables Table Partitions. This is needed since CTAS does not preserve source Partition information
+    Type: String
+    Default: NotApplicable
+
+
+  YourExistingGlueDatabase:
+    Description: Please enter the ARN of your S3 Tables Bucket
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'    
+    ConstraintDescription: Please provide your Existing Glue Database name or Namespace
+    AllowedPattern: '[\u0020-\uD7FF\uE000-\uFFFD\uD800\uDC00-\uDBFF\uDFFF\t]*'
+
+
+  YourExistingGlueTable:
+    Description: Please enter the ARN of your S3 Tables Bucket
+    Type: String
+    MinLength: '1'
+    MaxLength: '255'     
+    ConstraintDescription: Please provide your Existing Glue Table Name
+    AllowedPattern: '[\u0020-\uD7FF\uE000-\uFFFD\uD800\uDC00-\uDBFF\uDFFF\t]*'
+
+
+  ClusterSize:
+    Description: Please choose the size of your EMR Cluster to meet the desired migration workload
+    Type: String
+    Default: Small
+    AllowedValues:
+      - Small
+      - Medium
+      - Large
+      - Xlarge
+    ConstraintDescription: Cluster Size must be within the allowed value
+
+
+  MigrationType:
+    AllowedValues:
+      - New-Migration
+      - Update-Insert
+    Description: Please choose your desired migration type. Choose New-Migration to use CTAS to migrate to a new S3TablesBucket namespace or Update-Insert to load into existing namespace
+    Type: String
+    Default: New-Migration   
+
+
+  RecipientEmail:
+    Description: Please enter the Email address to receive Job notifications. Please remember to Confirm the Subscription
+    Type: String
+    MinLength: '5'
+    MaxLength: '150'
+
+
+Mappings:
+  PySpark:
+    Script:
+      s3key: resources/script/mys3tablespysparkscript.py
+      csvwithversionid: restore-and-copy/csv-manifest/with-version-id/
+    Parameter:
+      catalogname: s3tablescatalog
+
+  EMR:
+    Cluster:
+      releaselabel: emr-7.5.0
+    Small:
+      PrimaryInstanceCount: 1
+      PrimaryInstanceType: m6gd.4xlarge
+      CoreInstanceCount: 1
+      CoreInstanceType: i3.4xlarge
+      TaskInstanceCount: 1
+      TaskInstanceType: i3.4xlarge
+      executorMemory: 24G
+      executorCores: 4
+      driverMemory: 24G
+      driverCores: 4
+      dynamicAllocMinExec: 2
+      dynamicAllocMaxExec: 7
+      executorMemoryOverhead: 8G
+      driverMemoryOverhead: 2G
+      driverMaxResultsSize: 4G
+
+
+    Medium:
+      PrimaryInstanceCount: 1
+      PrimaryInstanceType: m5.4xlarge
+      CoreInstanceCount: 4
+      CoreInstanceType: i3.4xlarge
+      TaskInstanceCount: 4
+      TaskInstanceType: i3.4xlarge   
+      executorMemory: 24G
+      executorCores: 4
+      driverMemory: 24G
+      driverCores: 4
+      dynamicAllocMinExec: 8
+      dynamicAllocMaxExec: 29
+      executorMemoryOverhead: 8G
+      driverMemoryOverhead: 2G
+      driverMaxResultsSize: 4G
+
+  
+    Large:
+      PrimaryInstanceCount: 3
+      PrimaryInstanceType: r5.4xlarge
+      CoreInstanceCount: 4
+      CoreInstanceType: i3.4xlarge
+      TaskInstanceCount: 8
+      TaskInstanceType: i3.4xlarge  
+      executorMemory: 24G
+      executorCores: 3
+      driverMemory: 32G
+      driverCores: 4
+      dynamicAllocMinExec: 12
+      dynamicAllocMaxExec: 44
+      executorMemoryOverhead: 8G
+      driverMemoryOverhead: 6G
+      driverMaxResultsSize: 12G
+
+ 
+    Xlarge:
+      PrimaryInstanceCount: 3
+      PrimaryInstanceType: r5.4xlarge
+      CoreInstanceCount: 8
+      CoreInstanceType: i3.4xlarge
+      TaskInstanceCount: 12
+      TaskInstanceType: i3.4xlarge 
+      executorMemory: 28G
+      executorCores: 4
+      driverMemory: 48G
+      driverCores: 4
+      dynamicAllocMinExec: 20
+      dynamicAllocMaxExec: 74  
+      executorMemoryOverhead: 8G
+      driverMemoryOverhead: 6G   
+      driverMaxResultsSize: 16G
+
+
+  Performance:
+    Parameters:
+      sdkretryattempts: 10
+
+
+
+
+Resources:
+
+  Topic:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::SNS::Topic
+    Properties: 
+      KmsMasterKeyId: alias/aws/sns    
+
+
+  TopicSubscription:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref RecipientEmail
+      Protocol: email
+      TopicArn: !Ref Topic
+
+
+
+
+################################## Custom Resources ##############################################################
+
+################################ CheckResourceExists ######################################################
+
+  CheckResourceExists:
+    Type: 'Custom::LambdaTrigger'
+    Properties:
+      ServiceToken: !GetAtt CheckResourceExistsLambdaFunction.Arn
+      bucketexists: !Ref YourS3Bucket
+      sourcetableexists: !Ref YourExistingGlueTable
+      sourcedbexists: !Ref YourExistingGlueDatabase
+
+
+  CheckResourceExistsIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:  
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: AWSLambdaBasicExecutionRole
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'                  
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
+                Effect: Allow       
+        - PolicyName: CheckBucketExistsPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:GetBucketLocation'
+                Resource: !Sub arn:${AWS::Partition}:s3:::${YourS3Bucket}
+        - PolicyName: CheckSourceTableExistsPermissions
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:GetTable
+                  - glue:GetTables
+                Resource: 
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${YourExistingGlueDatabase}/${YourExistingGlueTable}" 
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${YourExistingGlueDatabase}"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"       
+
+
+  CheckResourceExistsLambdaFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Architectures:
+        - arm64
+      Handler: index.lambda_handler
+      Role: !GetAtt CheckResourceExistsIAMRole.Arn
+      Runtime: python3.12
+      Timeout: 150
+      MemorySize: 128
+      Code:
+        ZipFile: |
+            import json
+            import cfnresponse
+            import logging
+            import os
+            import boto3
+            from botocore.exceptions import ClientError
+            from botocore.client import Config
+
+            # Enable debugging for troubleshooting
+            # boto3.set_stream_logger("")
+
+
+            # Set up logging
+            logger = logging.getLogger(__name__)
+            logger.setLevel('INFO')
+
+
+            # Define Environmental Variables
+            my_region = str(os.environ['AWS_REGION'])
+
+
+            # Set SDK paramters
+            config = Config(retries = {'max_attempts': 5})
+
+            # Set variables
+            # Set Service Parameters
+            s3Client = boto3.client('s3', config=config, region_name=my_region)
+            glueClient = boto3.client('glue', region_name=my_region)
+
+
+            def get_table(db_name, tbl_name):
+                logger.info(f"Checking if Source Glue Table Exists")
+                try:
+                    check_table = glueClient.get_table(
+                        DatabaseName=db_name,
+                        Name=tbl_name,
+                    )
+                except Exception as e:
+                    logger.error(e)
+                    raise e
+                else:
+                    logger.info(check_table.get('Table').get('Name'))
+                    logger.info(f"Table {tbl_name} exists!")
+                    return check_table
+
+
+
+            def check_bucket_exists(bucket):
+                logger.info(f"Checking if Source Bucket Exists")
+                try:
+                    check_bucket = s3Client.get_bucket_location(
+                        Bucket=bucket,
+                    )
+                except ClientError as e:
+                    logger.error(e)
+                    raise
+                else:
+                    logger.info(f"Bucket {bucket}, exists, proceeding with deployment ...")
+                    return check_bucket            
+
+
+            def lambda_handler(event, context):
+              # Define Environmental Variables
+              s3Bucket  = event.get('ResourceProperties').get('bucketexists')
+              gluedb = event.get('ResourceProperties').get('sourcedbexists')
+              gluetbl = event.get('ResourceProperties').get('sourcetableexists')
+
+              logger.info(f'Event detail is: {event}')
+
+              if event.get('RequestType') == 'Create':
+                # logger.info(event)
+                try:
+                  logger.info("Stack event is Create, checking specified Source S3 Bucket and Source Glue Table exists...")
+                  if s3Bucket:
+                    check_bucket_exists(s3Bucket)
+                  get_table(gluedb, gluetbl)  
+                  responseData = {}
+                  responseData['message'] = "Successful"
+                  logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+                except Exception as e:
+                  logger.error(e)
+                  responseData = {}
+                  responseData['message'] = str(e)
+                  failure_reason = str(e) 
+                  logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, responseData, reason=failure_reason)
+
+
+              elif event.get('RequestType') == 'Delete' or event.get('RequestType') == 'Update':
+                logger.info(event)
+                try:
+                  logger.info(f"Stack event is Delete or Update, nothing to do....")
+                  responseData = {}
+                  responseData['message'] = "Completed"
+                  logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+                  cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+                except Exception as e:
+                  logger.error(e)
+                  responseData = {}
+                  responseData['message'] = str(e)
+                  logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+                  cfnresponse.send(event, context, cfnresponse.FAILED, responseData)                  
+
+
+
+################################################ Code Ends ####################################################
+
+################################ StackNametoLower #######################################################
+
+
+  StackNametoLower:
+    Type: Custom::NametoLower
+    Properties:
+      ServiceToken: !GetAtt NametoLower.Arn
+      stackname: !Ref AWS::StackName    
+
+
+  NametoLowerIAMRole:
+    DependsOn:
+      - CheckResourceExists  
+    Type: AWS::IAM::Role
+    Properties:
+      Policies:
+        - PolicyName: AWSLambdaBasicExecutionRole
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'                  
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
+                Effect: Allow       
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+
+
+  NametoLower:
+    DependsOn:
+      - CheckResourceExists     
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Architectures:
+        - arm64
+      Description: Enforces Lower case for Stackname
+      MemorySize: 128
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt NametoLowerIAMRole.Arn
+      Timeout: 30
+      Code:
+        ZipFile: |
+          import cfnresponse
+
+
+          def lambda_handler(event, context):
+              to_lower = event['ResourceProperties'].get('stackname', '').lower()
+              responseData = dict(change_to_lower=to_lower)
+              cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+
+################################# Code Ends ############################################################
+
+
+  EMRLogS3Bucket:
+    DependsOn:
+      - CheckResourceExists    
+    Type: 'AWS::S3::Bucket'
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpirationRule
+            Prefix: logs/
+            Status: Enabled
+            ExpirationInDays: 180
+            NoncurrentVersionExpiration:
+                NoncurrentDays: 3
+          - Id: delete-incomplete-mpu
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 1       
+
+############################################################ Upload PySpark Script to S3 Bucket ###################################################
+
+
+  UploadScriptCustomResource:
+    DependsOn:
+      - CheckResourceExists   
+    Type: Custom::EmptyS3Bucket
+    Properties:
+      ServiceToken: !GetAtt UploadScriptFunction.Arn
+
+  UploadScriptFunctionIAMRole:
+    DependsOn:
+      - CheckResourceExists 
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: '/'
+      Policies:
+        - PolicyName: AWSLambdaBasicExecutionRole
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'                  
+                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
+                Effect: Allow        
+        - PolicyName: WriteObjectPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject*'
+                  - 's3:List*'
+                  - 's3:GetObject*'
+                Resource:
+                  - !Sub arn:${AWS::Partition}:s3:::${EMRLogS3Bucket}/*      
+                  - !Sub arn:${AWS::Partition}:s3:::${EMRLogS3Bucket}                
+
+
+
+  UploadScriptFunction:
+    DependsOn:
+      - CheckResourceExists 
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Architectures:
+        - arm64
+      Environment:
+        Variables:
+          asset1: !FindInMap [ PySpark, Script, s3key ] 
+          my_account_id: !Sub ${AWS::AccountId}
+          s3BuckettoDownload: !Ref EMRLogS3Bucket
+          max_attempts: !FindInMap [ Performance, Parameters, sdkretryattempts ] 
+          asset1_key: !FindInMap [ PySpark, Script, s3key ]
+      Description: Downloads Function Source Code from Github to S3
+      MemorySize: 384
+      Runtime: python3.12
+      Handler: index.lambda_handler
+      Role: !GetAtt UploadScriptFunctionIAMRole.Arn
+      Timeout: 360
+      Code:
+        ZipFile: |
+            import cfnresponse
+            import boto3
+            import io
+            import json
+            import logging
+            import uuid
+            import os
+            from botocore.client import Config
+            from botocore.exceptions import ClientError
+            from boto3.s3.transfer import TransferConfig
+
+            # Enable Debug logging
+            boto3.set_stream_logger('')
+
+            # Setup Logging
+            logger = logging.getLogger(__name__)
+            logger.setLevel('INFO')
+
+            # Define Environmental Variables
+            my_asset1_key = str(os.environ['asset1_key'])
+            my_bucket = str(os.environ['s3BuckettoDownload'])
+            my_max_attempts = int(os.environ['max_attempts'])
+            my_region = str(os.environ['AWS_REGION'])
+
+
+            # Set and Declare Configuration Parameters
+            config = Config(retries={'max_attempts': my_max_attempts})
+
+            # Set Service Clients
+            s3 = boto3.resource('s3', config=config)
+
+
+            # Upload PySpark Script to Solution S3 Bucket
+            def stream_to_s3(bucket, key, body):
+                logger.info(f'Starting PySpark Script upload to the S3 Bucket: s3://{bucket}/{key}')
+                try:
+                    upload_to_s3 = s3.Object(bucket, key).put(Body=body)
+                except Exception as e:
+                    logger.error(e)
+                else:
+                    logger.info(f'Object successfully uploaded to s3://{bucket}/{key}')
+
+
+            # Define PySpark Script to Upload as blob
+            my_blob = f'''
+            import sys
+            import argparse
+            from pyspark.sql import SparkSession
+            from pyspark import SparkConf
+            import logging
+
+            # Setup Logging
+            logger = logging.getLogger(__name__)
+            logger.setLevel('INFO')
+
+            # Import Sys Arguments
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--data_migration_type', help="Data Migration type new or insert/update.")
+            parser.add_argument('--data_source_bucket', help="Source data S3 bucket name.")
+            parser.add_argument('--data_source_db', help="Source data Glue Database name.")
+            parser.add_argument('--data_source_tbl', help="Source data Glue Table name.")
+            parser.add_argument('--data_destination_s3tables_arn', help="Destination S3 Table ARN.")
+            parser.add_argument('--data_destination_catalog', help="Destination S3 Tables Namespace/Database.")
+            parser.add_argument('--data_destination_s3tables_namespace', help="Destination S3 Tables Namespace/Database.")
+            parser.add_argument('--data_destination_s3tables_tbl', help="Destination S3 Tables Table name .")
+            parser.add_argument('--data_destination_s3tables_partitions', help="Destination S3 Tables Table Partitions .")
+            parser.add_argument('--data_source_tbl_partition_name', help="Source Data Table Partition Name .")
+            parser.add_argument('--data_source_tbl_partition_value', help="Source Data Table Partition Value .")
+
+            # Initiate ARGS
+            args = parser.parse_args()
+
+            # Now define the variables
+            data_migration_type = args.data_migration_type
+            data_source_bucket = args.data_source_bucket
+            data_source_db = args.data_source_db
+            data_source_tbl = args.data_source_tbl
+            data_destination_catalog = args.data_destination_catalog
+            data_destination_s3tables_arn = args.data_destination_s3tables_arn
+            data_destination_s3tables_namespace = args.data_destination_s3tables_namespace
+            data_destination_s3tables_tbl = args.data_destination_s3tables_tbl
+            data_destination_s3tables_partitions = args.data_destination_s3tables_partitions
+            data_source_tbl_partition_name = args.data_source_tbl_partition_name
+            data_source_tbl_partition_value = args.data_source_tbl_partition_value
+
+            # Create Spark Configuration Set
+            conf = SparkConf() \
+                .set("spark.sql.catalogImplementation", "hive") \
+                .set("mapreduce.input.fileinputformat.input.dir.recursive", "true") \
+                .set(f"spark.sql.catalog.{{data_destination_catalog}}", "org.apache.iceberg.spark.SparkCatalog") \
+                .set(f"spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+                .set(f"spark.sql.catalog.{{data_destination_catalog}}.catalog-impl", "software.amazon.s3tables.iceberg.S3TablesCatalog") \
+                .set(f"spark.sql.catalog.{{data_destination_catalog}}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
+                .set(f"spark.sql.catalog.{{data_destination_catalog}}.warehouse", data_destination_s3tables_arn) 
+
+
+
+            # Initiate PySpark Session
+            spark = SparkSession.builder.appName("MyMigrationApp").config(conf=conf).getOrCreate()
+
+
+            # Function for performing INSERT/UPDATE into an existing destination Database/Table
+            def insert_update_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
+                """
+                Use INSERT/UPDATE to load data from source to S3 Tables Bucket
+                :param:
+                """
+
+                try:
+                    # Do a CTAS to migrate table data from source Hive to a new Iceberg Table
+                    sql_query_insert = f"""
+                    INSERT INTO
+                    `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
+                    AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
+                    """
+                    # Run the INSERT INTO SQL query
+                    spark_sql_query_insert = spark.sql(sql_query_insert)
+                except Exception as e:
+                    print(e, exc_info=True)
+                    raise e
+
+
+            def create_namespace(catalog, dst_db): 
+                # Create a NameSpace in S3 Table Buckets first
+                try:
+                    # Create the Namespace first
+                    sql_query_namespace = f"""
+                    CREATE NAMESPACE IF NOT EXISTS
+                    `{{catalog}}`.`{{dst_db}}`
+                    """        
+                    # Now run the query
+                    spark_sql_query_namespace = spark.sql(sql_query_namespace)                    
+                except Exception as e:
+                    print(e, exc_info=True)
+                    raise e                       
+
+
+
+            # Function for performing CTAS - CREATE TABLE AS SELECT into a new destination Database/Table - creates a new DB/Table
+            def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
+                """
+                Use CTAS to load data from source to S3 Tables Bucket
+                :param:
+                """
+                print(f"Echo parameters catalog={{catalog}}, src_db={{src_db}}, src_tbl={{src_tbl}}, dst_db={{dst_db}}, dst_tbl={{dst_tbl}}")
+                # We need to create the namespace/database first, so calling the namespace function
+                print(f"Creating the namespace {{dst_db}} first if it does not already exist....")
+                create_namespace(catalog, dst_db)
+                print(f"Creating the namespace {{dst_db}} is successful proceeding to CTAS, please hold...")
+                try:
+                    # Do a CTAS to migrate table data from source Hive to a new Iceberg Table
+                    sql_query_d = f"""
+                    CREATE TABLE IF NOT EXISTS
+                    `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
+                    USING iceberg
+                    AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
+                    """
+                    # Run the CTAS SQL query
+                    spark_sql_query_d = spark.sql(sql_query_d)
+                except Exception as e:
+                    print(e, exc_info=True)
+                    raise e
+                else:
+                    print(f"Create Table as Select (CTAS) completed....")
+
+
+            # Function for performing a querying on a Table
+            def query_table_data(catalog, db, tbl):
+                """
+                Check that we can access the Table data
+                :param:
+                """
+                # Handle query with or without catalog name provided
+                if catalog:
+                    sql_query_data = f"""SELECT * 
+                    FROM `{{catalog}}`.`{{db}}`.`{{tbl}}`
+                    limit 10
+                    """
+                else:
+                    sql_query_data = f"""SELECT * 
+                    FROM `{{db}}`.`{{tbl}}`
+                    limit 10
+                    """
+
+                try:
+                    # Run Spark SQL Query
+                    spark_sql_query_data = spark.sql(sql_query_data)
+                except Exception as e:
+                    print(e, exc_info=True)
+                    raise e
+                else:
+                    return spark_sql_query_data.show()
+
+
+            # Main workflow Function, calls other functions as needed
+            def initiate_workflow():
+                """
+                Initiate Migration Workflow
+
+                """
+                try:
+                    # First let's query the source table
+                    query_table_data(None, data_source_db, data_source_tbl)
+                    # Depending on the Migration Type, let's choose the CTAS or Insert into/Update
+                    if data_migration_type == 'New-Migration':
+                        print(f"We are performing a new migration, so will use CTAS to create a new table and load data")
+                        ctas_action(data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
+                                    data_destination_s3tables_tbl
+                                    )
+
+                    elif data_migration_type == 'Update-Insert':
+                        print(f"We are performing an INSERT INTO/UPDATE, the destination table already exists")
+                        insert_update_action(data_destination_catalog, data_source_db, data_source_tbl,
+                                            data_destination_s3tables_namespace,
+                                            data_destination_s3tables_tbl
+                                            )
+                    # Now we are done with CTAS or INSERT, let's perform some verifications on the destination Table
+                    # Let's query the destination table
+                    print(f"Let do a test query of the destination table {{data_destination_s3tables_namespace}}.{{data_destination_s3tables_tbl}} to see if we can perform a successful query")
+                    query_table_data(data_destination_catalog, data_destination_s3tables_namespace, data_destination_s3tables_tbl)
+                    """ Migration and verification was successful!"""
+
+                except Exception as e:
+                    print(e, exc_info=True)
+                    sys.exit(1)
+                else:
+                    # Finalize Job
+                    print("Successful Job completion")
+
+
+
+            if __name__ == "__main__":
+                # Start the Main Task
+                initiate_workflow()
+            '''
+            # End F String and PySpark Blob
+
+            # Initiating Main Function
+            def lambda_handler(event, context):
+                logger.info(f'Event detail is: {event}')
+                # Start Cloudformation Invocation #
+                if event.get('RequestType') == 'Create':
+                    # logger.info(event)
+                    try:
+                        logger.info("Stack event is Create or Update, Uploading PySpark to S3 Bucket...")
+                        # Now upload the Script to the Solution Amazon S3 Bucket!.
+                        stream_to_s3(my_bucket, my_asset1_key, my_blob)
+
+                        responseData = {}
+                        responseData['message'] = "Successful"
+                        logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+                        cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+                    except Exception as e:
+                        logger.error(e)
+                        responseData = {}
+                        responseData['message'] = str(e)
+                        failure_reason = str(e)
+                        logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+                        cfnresponse.send(event, context, cfnresponse.FAILED, responseData, reason=failure_reason)
+
+                else:
+                    logger.info(f"Stack event is Update or Delete, nothing to do....")
+                    responseData = {}
+                    responseData['message'] = "Completed"
+                    logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+                    cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+
+################################################ Code Ends #############################################################
+
+
+################################################### EMR EC2 Cluster ####################################################
+
+##############################  Start State Machine ################################################
+
+
+  EMREC2StateMachineExecutionRole:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iam:PassRole
+                Resource:
+                  - !GetAtt EMRServiceRole.Arn
+                  - !GetAtt EMREc2Role.Arn
+              - Effect: Allow
+                Action:
+                  - elasticmapreduce:RunJobFlow
+                  - elasticmapreduce:TerminateJobFlows
+                  - elasticmapreduce:DescribeCluster
+                  - elasticmapreduce:AddJobFlowSteps
+                  - elasticmapreduce:DescribeStep
+                Resource: !Sub arn:${AWS::Partition}:elasticmapreduce:${AWS::Region}:${AWS::AccountId}:cluster/*
+        - PolicyName: AllowServiceLinkedRole      
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - iam:CreateServiceLinkedRole
+                  - iam:PutRolePolicy
+                Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:iam::*:role/aws-service-role/elasticmapreduce.amazonaws.com*/AWSServiceRoleForEMRCleanup*
+                Condition:
+                  StringLike:
+                    iam:AWSServiceName:
+                    - elasticmapreduce.amazonaws.com
+                    - elasticmapreduce.amazonaws.com.cn
+            Version: 2012-10-17
+        - PolicyName: SNSPublishPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'sns:Publish'
+                Resource:
+                  - !Ref Topic
+     
+
+
+  EMREC2StateMachine:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      RoleArn: !GetAtt [ EMREC2StateMachineExecutionRole, Arn ]
+      DefinitionString:
+        !Sub
+          - |-
+            {
+              "Comment": "Amazon EMR for Migrating to Amazon S3 Tables Bucket",
+              "StartAt": "Create an EMR cluster",
+              "States": {
+                "Create an EMR cluster": {
+                  "Type": "Task",
+                  "Resource": "arn:${AWS::Partition}:states:::elasticmapreduce:createCluster.sync",
+                  "Parameters": {
+                    "Name": "MigratetoS3Tables",
+                    "VisibleToAllUsers": true,
+                    "ReleaseLabel": "${EMRReleaseLabel}",
+                    "Applications": [
+                      {
+                        "Name": "Hive"
+                      },
+                      {
+                        "Name": "Hadoop"
+                      },
+                      {
+                        "Name": "Livy"
+                      },
+                      {
+                        "Name": "Spark"
+                      }
+                    ],
+                    "ServiceRole": "${EMRServiceRole}",
+                    "JobFlowRole": "${EMREc2InstanceProfile}",
+                    "Configurations": [
+                      {
+                        "Classification": "hive-site",
+                        "Properties": {
+                          "hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory"
+                        }
+                      },
+                      {
+                        "Classification": "spark-hive-site",
+                        "Properties": {
+                          "hive.metastore.client.factory.class": "com.amazonaws.glue.catalog.metastore.AWSGlueDataCatalogHiveClientFactory"
+                        }
+                      },                      
+                      {
+                        "Classification": "iceberg-defaults",
+                        "Properties": {
+                          "iceberg.enabled": "true"
+                        }
+                      },
+                      {
+                        "Classification": "emrfs-site",
+                        "Properties": {
+                          "fs.s3.aimd.enabled": "true"
+                        }
+                      },
+                      {
+                        "Classification": "spark-defaults",
+                        "Properties": {
+                          "spark.executor.memory": "${executorMemory}",
+                          "spark.executor.cores": "${executorCores}",
+                          "spark.driver.memory": "${driverMemory}",
+                          "spark.driver.cores": "${driverCores}",
+                          "spark.dynamicAllocation.minExecutors": "${dynamicAllocMinExec}",
+                          "spark.dynamicAllocation.maxExecutors": "${dynamicAllocMaxExec}",
+                          "spark.driver.memoryOverhead": "${driverMemoryOverhead}",
+                          "spark.executor.memoryOverhead": "${executorMemoryOverhead}",
+                          "spark.driver.maxResultSize": "${driverMaxResultsSize}"
+                        }
+                      }                      
+                    ],
+                    "LogUri": "s3://${EMRLogS3Bucket}/logs/",
+                    "Instances": {
+                      "KeepJobFlowAliveWhenNoSteps": true,
+                      "InstanceFleets": [
+                        {
+                          "Name": "MyPrimaryFleet",
+                          "InstanceFleetType": "MASTER",
+                          "TargetOnDemandCapacity": ${EMRPryInstanceCount},
+                          "InstanceTypeConfigs": [
+                            {
+                              "InstanceType": "${EMRPryInstanceType}"
+                            }
+                          ]
+                        },
+                        {
+                          "Name": "MyCoreFleet",
+                          "InstanceFleetType": "CORE",
+                          "TargetOnDemandCapacity": ${EMRCoreInstanceCount},
+                          "InstanceTypeConfigs": [
+                            {
+                              "InstanceType": "${EMRCoreInstanceType}"
+                            }
+                          ]
+                        },
+                        {
+                          "Name": "MyTaskFleet",
+                          "InstanceFleetType": "TASK",
+                          "TargetOnDemandCapacity": ${EMRTaskInstanceCount},
+                          "InstanceTypeConfigs": [
+                            {
+                              "InstanceType": "${EMRTaskInstanceType}"
+                            }
+                          ]
+                        }                          
+                      ]
+                    }
+                  },
+                  "ResultPath": "$.cluster",
+                  "Next": "Notify EMR Creation",
+                  "Retry": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "BackoffRate": 2,
+                      "IntervalSeconds": 1,
+                      "MaxAttempts": 3,
+                      "JitterStrategy": "FULL"
+                    }
+                  ],
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Comment": "CatchError",
+                      "Next": "ClusterFailed",
+                      "ResultPath": "$.error"
+                    }
+                  ]
+                },
+                "NotifyFailedRetry": {
+                  "Type": "Task",
+                  "Resource": "arn:${AWS::Partition}:states:::sns:publish",
+                  "Parameters": {
+                    "TopicArn": "${snspublish_TopicArn_a2a28236}",
+                    "Message": {
+                      "Subject": "Automated Migration to Amazon S3 Tables Bucket",
+                      "Message.$": "$.error"
+                    }
+                  },
+                  "Next": "Terminate Cluster",
+                  "ResultPath": null
+                },
+                "Notify EMR Creation": {
+                  "Type": "Task",
+                  "Resource": "arn:${AWS::Partition}:states:::sns:publish",
+                  "Parameters": {
+                    "TopicArn": "${snspublish_TopicArn_a2a28236}",
+                    "Message": {
+                      "Subject": "Automated Migration to Amazon S3 Tables Bucket",
+                      "Status": "EMR Cluster Creation",
+                      "Message": "EMR EC2 Cluster Successfully Created!- Initiating Table Migration Step"
+                    }
+                  },
+                  "Next": "Initiate Table Migration",
+                  "Retry": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "BackoffRate": 2,
+                      "IntervalSeconds": 1,
+                      "MaxAttempts": 3,
+                      "JitterStrategy": "FULL"
+                    }
+                  ],
+                  "ResultPath": null
+                },
+                "Initiate Table Migration": {
+                  "Type": "Task",
+                  "Resource": "arn:${AWS::Partition}:states:::elasticmapreduce:addStep.sync",
+                  "Parameters": {
+                    "ClusterId.$": "$.cluster.ClusterId",
+                    "Step": {
+                      "Name": "My first EMR step",
+                      "ActionOnFailure": "CONTINUE",
+                      "HadoopJarStep": {
+                        "Jar": "command-runner.jar",
+                        "Args": [
+                          "spark-submit",
+                          "--master",
+                          "yarn",
+                          "--conf",
+                          "spark.jars.packages=org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,software.amazon.s3tables:s3-tables-catalog-for-iceberg:0.1.0",                          
+                          "${PySparkScriptURI}",
+                          "--data_migration_type",
+                          "${DataMigrationType}",
+                          "--data_source_bucket",
+                          "${DataSourceS3Bucket}",
+                          "--data_source_db",
+                          "${DataSourceGlueDatabase}",
+                          "--data_source_tbl",
+                          "${DataSourceGlueTable}",
+                          "--data_destination_catalog",
+                          "${DataDestinationCatalog}",
+                          "--data_destination_s3tables_arn",
+                          "${DataDestinationS3TablesArn}",
+                          "--data_destination_s3tables_namespace",
+                          "${DataDestinationS3TablesNamespace}",
+                          "--data_destination_s3tables_tbl",
+                          "${DataDestinationS3TablesTables}",
+                          "--data_destination_s3tables_partitions",
+                          "${DataDestinationS3TablesPartitions}" ,
+                          "--data_source_tbl_partition_name",
+                          "${DataSourceGlueTablePartitionName}",
+                          "--data_source_tbl_partition_value",
+                          "${DataSourceGlueTablePartitionValue}"                                                                          
+                        ]
+                      }
+                    }
+                  },
+                  "Retry": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "IntervalSeconds": 1,
+                      "MaxAttempts": 3,
+                      "BackoffRate": 2
+                    }
+                  ],
+                  "ResultPath": "$.firstStep",
+                  "Next": "Notify Migration Complete",
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "NotifyFailedRetry",
+                      "ResultPath": "$.error"
+                    }
+                  ]
+                },
+                "Notify Migration Complete": {
+                  "Type": "Task",
+                  "Resource": "arn:${AWS::Partition}:states:::sns:publish",
+                  "Parameters": {
+                    "TopicArn": "${snspublish_TopicArn_a2a28236}",
+                    "Message": {
+                      "Subject": "Automated Migration to Amazon S3 Tables Bucket",
+                      "Status": "Task Complete",
+                      "Message": "EMR Table Migration to S3 Tables completed successfully! Initiating Cluster Termination"
+                    }
+                  },
+                  "Next": "Terminate Cluster",
+                  "Retry": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "BackoffRate": 2,
+                      "IntervalSeconds": 1,
+                      "MaxAttempts": 3,
+                      "JitterStrategy": "FULL"
+                    }
+                  ],
+                  "ResultPath": null
+                },
+                "Terminate Cluster": {
+                  "Type": "Task",
+                  "Resource": "arn:${AWS::Partition}:states:::elasticmapreduce:terminateCluster",
+                  "Parameters": {
+                    "ClusterId.$": "$.cluster.ClusterId"
+                  },
+                  "End": true,
+                  "Retry": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "BackoffRate": 2,
+                      "IntervalSeconds": 1,
+                      "MaxAttempts": 3,
+                      "JitterStrategy": "FULL",
+                      "MaxDelaySeconds": 2
+                    }
+                  ],
+                  "Catch": [
+                    {
+                      "ErrorEquals": [
+                        "States.ALL"
+                      ],
+                      "Next": "ClusterFailed",
+                      "ResultPath": "$.error"
+                    }
+                  ]
+                },
+                "ClusterFailed": {
+                  "Type": "Task",
+                  "Resource": "arn:${AWS::Partition}:states:::sns:publish",
+                  "Parameters": {
+                    "TopicArn": "${snspublish_TopicArn_a2a28236}",
+                    "Message": {
+                      "Subject": "Automated Migration to Amazon S3 Tables Bucket",
+                      "Message.$": "$.error"
+                    }
+                  },
+                  "End": true
+                }
+              }
+            }
+          - EMRServiceRole: !Ref EMRServiceRole
+            EMREc2InstanceProfile: !Ref EMREc2InstanceProfile
+            EMRLogS3Bucket: !Ref EMRLogS3Bucket
+            snspublish_TopicArn_a2a28236: !Ref Topic
+            DataSourceS3Bucket: !Ref YourS3Bucket
+            DataSourceGlueTable: !Ref YourExistingGlueTable
+            DataSourceGlueDatabase: !Ref YourExistingGlueDatabase
+            DataDestinationCatalog: !FindInMap [ PySpark, Parameter, catalogname ]
+            DataDestinationS3TablesArn: !Ref S3TableBucket
+            DataDestinationS3TablesNamespace: !Ref S3TableBucketNamespace
+            DataDestinationS3TablesTables: !Ref S3TableBucketTables
+            PySparkScriptURI: !Join ['', ['s3://', !Ref EMRLogS3Bucket, '/', !FindInMap [ PySpark, Script, s3key ] ]]
+            DataMigrationType: !Ref MigrationType
+            DataDestinationS3TablesPartitions: !Ref S3TableBucketTablesPartitions
+            EMRReleaseLabel: !FindInMap [ EMR, Cluster, releaselabel ]
+            DataSourceGlueTablePartitionName: !Ref YourExistingGlueTablePartitionName
+            DataSourceGlueTablePartitionValue: !Ref YourExistingGlueTablePartitionValue
+            EMRPryInstanceType: !FindInMap [EMR, !Ref ClusterSize, PrimaryInstanceType]
+            EMRPryInstanceCount: !FindInMap [EMR, !Ref ClusterSize, PrimaryInstanceCount]
+            EMRCoreInstanceType: !FindInMap [EMR, !Ref ClusterSize, CoreInstanceType]
+            EMRCoreInstanceCount: !FindInMap [EMR, !Ref ClusterSize, CoreInstanceCount]
+            EMRTaskInstanceType: !FindInMap [EMR, !Ref ClusterSize, TaskInstanceType]
+            EMRTaskInstanceCount: !FindInMap [EMR, !Ref ClusterSize, TaskInstanceCount]      
+            executorMemory: !FindInMap [EMR, !Ref ClusterSize, executorMemory]  
+            executorCores: !FindInMap [EMR, !Ref ClusterSize, executorCores] 
+            driverMemory: !FindInMap [EMR, !Ref ClusterSize, driverMemory] 
+            driverCores: !FindInMap [EMR, !Ref ClusterSize, driverCores] 
+            dynamicAllocMinExec: !FindInMap [EMR, !Ref ClusterSize, dynamicAllocMinExec] 
+            dynamicAllocMaxExec: !FindInMap [EMR, !Ref ClusterSize, dynamicAllocMaxExec]   
+            driverMemoryOverhead: !FindInMap [EMR, !Ref ClusterSize, driverMemoryOverhead]  
+            executorMemoryOverhead: !FindInMap [EMR, !Ref ClusterSize, executorMemoryOverhead]      
+            driverMaxResultsSize: !FindInMap [EMR, !Ref ClusterSize, driverMaxResultsSize]             
+
+
+
+
+  EMREc2InstanceProfile:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - Ref: EMREc2Role
+
+  EMREc2Role:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2008-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: !Sub ec2.${AWS::URLSuffix}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: AccessSolutionBucket
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - s3:Delete*
+                  - s3:List*
+                  - s3:PutObject*
+                  - s3:GetObject*
+                  - s3:GetBucketLocation
+                Effect: Allow
+                Resource: 
+                  - !Sub arn:${AWS::Partition}:s3:::${EMRLogS3Bucket}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${EMRLogS3Bucket}
+            Version: 2012-10-17
+        - PolicyName: AccessDataSourceBucket
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - s3:ListBucket
+                  - s3:ListBucketVersions
+                  - s3:GetObject
+                  - s3:GetObjectVersion
+                  - s3:GetBucketLocation
+                Effect: Allow
+                Resource: 
+                  - !Sub arn:${AWS::Partition}:s3:::${YourS3Bucket}/*
+                  - !Sub arn:${AWS::Partition}:s3:::${YourS3Bucket}
+            Version: 2012-10-17
+        - PolicyName: WritetoDestinationS3TablesBucket
+          PolicyDocument:
+            Statement:
+              - Action:
+                  - s3tables:CreateTable
+                  - s3tables:PutTableData
+                  - s3tables:GetTableData
+                  - s3tables:GetTableMetadataLocation
+                  - s3tables:UpdateTableMetadataLocation
+                  - s3tables:GetNamespace
+                  - s3tables:CreateNamespace
+                Effect: Allow
+                Resource: 
+                  - !Ref S3TableBucket
+                  - !Sub ${S3TableBucket}/table/*
+            Version: 2012-10-17                                                            
+        - PolicyName: AccessDataSourceDBandTable
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - glue:GetDatabase
+                  - glue:GetDatabases
+                  - glue:GetPartition
+                  - glue:GetTables
+                  - glue:GetPartitions
+                  - glue:GetTable
+                Effect: Allow
+                Resource: 
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${YourExistingGlueTable}/*"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${YourExistingGlueTable}"                  
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:table/${YourExistingGlueDatabase}/*"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${YourExistingGlueDatabase}"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${YourExistingGlueDatabase}/*"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${YourExistingGlueTable}/*"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/${YourExistingGlueTable}"
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"                                       
+        - PolicyName: ReadGlueCatalogandDB
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - glue:GetDatabases
+                Effect: Allow
+                Resource: 
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:catalog"      
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database*"
+        - PolicyName: ReadDefaultDB
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Action:
+                  - glue:GetDatabase
+                Effect: Allow
+                Resource:   
+                  - !Sub "arn:${AWS::Partition}:glue:${AWS::Region}:${AWS::AccountId}:database/default"                  
+
+
+  EMRServiceRole:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2008-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: !Sub elasticmapreduce.${AWS::URLSuffix}
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyDocument:
+            Statement:
+              - Action:
+                  - iam:CreateServiceLinkedRole
+                  - iam:PutRolePolicy
+                Effect: Allow
+                Resource: !Sub arn:${AWS::Partition}:iam::*:role/aws-service-role/elasticmapreduce.amazonaws.com*/AWSServiceRoleForEMRCleanup*
+                Condition:
+                  StringLike:
+                    iam:AWSServiceName:
+                    - elasticmapreduce.amazonaws.com
+                    - elasticmapreduce.amazonaws.com.cn
+            Version: 2012-10-17
+          PolicyName: AllowServiceLinkedRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonElasticMapReduceRole        
+
+
+
+############################ End Code ########################################
+
+
+############################################################ End Main Body ###################################################################
+
+
+
+Outputs:
+  BucketName:
+    Value: !Ref EMRLogS3Bucket
+    Description: Solution Amazon S3 Bucket to Upload Manifest and Access Batch Operations Job Reports.
+
+  EMREC2StateMachineArn:
+    Value: !Ref EMREC2StateMachine
+
+  EMREC2RoleArn:
+    Value: !GetAtt EMREc2Role.Arn
+
+  PySparkScriptURI:
+    Value: !Join ['', ['s3://', !Ref EMRLogS3Bucket, '/', !FindInMap [ PySpark, Script, s3key ] ]]  
+
+    
