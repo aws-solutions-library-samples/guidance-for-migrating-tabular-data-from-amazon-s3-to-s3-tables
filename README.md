@@ -2,42 +2,44 @@
 
 ## Table of Contents
 1. [Introduction](#introduction)
-2. [Solution Overview](#solution-overview)
-3. [Costs](#costs)
-4. [Deployment options](#deployment-options)
-5. [Deployment steps](#deployment-steps)
-6. [Post deployment steps](#post-deployment-steps)
-7. [Undeployment steps](#undeployment-steps) 
-8. [Customer responsibility](#customer-responsibility)
-9. [Feedback](#feedback)
-10. [Notices](#notices)
+2. [Core Services](#core-services)
+3. [Solution Overview](#solution-overview)
+4. [Costs](#costs)
+5. [Deployment options](#deployment-options)
+6. [Deployment steps](#deployment-steps)
+7. [Post deployment steps](#post-deployment-steps)
+8. [Cleanup](#cleanup) 
+9. [Customer responsibility](#customer-responsibility)
+10. [Feedback](#feedback)
+12. [Notices](#notices)
 
 ---
 
 <a name="introduction"></a>
 ## Introduction
 
-This user guide is created for anyone who is interested in Migrating Apache Iceberg Data to [Amazon S3 Tables](https://https://aws.amazon.com/s3/features/tables/). This solution sets up an automated migration solution for moving data from an existing [Amazon S3](https://aws.amazon.com/s3/) bucket and [AWS Glue Table](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-glue-table.html) to an Amazon S3 Tables Bucket using [AWS Step Functions](https://aws.amazon.com/step-functions/) and [Amazon EMR](https://aws.amazon.com/emr/) with [Apache Spark](https://spark.apache.org/). 
+This user guide is created for anyone who is interested in Migrating Apache Iceberg Data to [Amazon S3 Tables](https://aws.amazon.com/s3/features/tables/). This solution sets up an automated migration solution for moving data from an existing [Amazon S3](https://aws.amazon.com/s3/) bucket and [AWS Glue Table](https://docs.aws.amazon.com/glue/latest/dg/tables-described.html) to an Amazon S3 Tables Bucket using [AWS Step Functions](https://aws.amazon.com/step-functions/) and [Amazon EMR](https://aws.amazon.com/emr/) with [Apache Spark](https://spark.apache.org/). 
 
-<a name="core-concepts"></a>
-## Core Concepts
+<a name="core-services"></a>
+## Core Services
 Below is a high-level overview of the Core Services that are incorporated into Migrating Apache Iceberg Data from Amazon S3 to S3 Tables. We will assume the reader is familiar with Git, Python, and AWS.
 
 | Service | Description |
 |---------|-------------|
 | [AWS CloudFormation](https://aws.amazon.com/cloudformation/) | Speed up cloud provisioning with infrastructure as code. |
-| [Amazon S3](https://aws.amazon.com/s3/) | Object storage built to retrieve any amount of data from anywhere. |
-| [Amazon S3 Tables](https://https://aws.amazon.com/s3/features/tables/) | Amazon S3 Tables deliver the first cloud object store with built-in Apache Iceberg support and streamline storing tabular data at scale. |
+| [Amazon S3](https://aws.amazon.com/s3/) | An object storage service that offers industry-leading scalability, data availability, security, and performance. |
+| [Amazon S3 Tables](https://aws.amazon.com/s3/features/tables/) | Delivering the first cloud object store with built-in Apache Iceberg support and streamline storing tabular data at scale. |
 | [AWS Lambda](https://aws.amazon.com/lambda/) | Serverless compute service that runs code in response to events and automatically manages the compute resources, enabling developers to build applications that scale with business needs. |
-| [AWS Step Functions](https://aws.amazon.com/step-functions/) | Orchestrate multiple AWS services into serverless workflows. |
-| [Amazon Simple Notification Service](https://aws.amazon.com/pm/sns) | Fully managed pub/sub messaging, SMS, email, and mobile push notifications. |
+| [AWS Step Functions](https://aws.amazon.com/step-functions/) | Create workflows to build distributed applications, automate processes, orchestrate microservices, and create data and machine learning pipelines. |
+| [Amazon Simple Notification Service](https://aws.amazon.com/pm/sns) | A managed service that provides message delivery from publishers to subscribers. |
 | [Amazon Identity and Access Management](https://aws.amazon.com/iam) | Securely manage identities and access to AWS services and resources. |
 
 ---
 
 <a name="solution-overview"></a>
 ## Solution Overview
-AWS CloudFormation deploys resources including AWS Lambda, AWS IAM, custom resources and an AWS Step Function with a PySpark Script. AWS Lambda then verifies the existence of source S3 Buckets and Glue Table, and if they exist will create a S3 bucket for EMR log retention. The user manually invokes the EMREC2StateMachine task from the Step Function to orchestrate EMR cluster creation and Apache Spark job execution. The Apache Spark job then runs on the EMR cluster, using CTAS (Create Table As Select) to migration the source data to the target S3 Tables Bucket.
+
+This solution deploys an AWS Step Functions state machine to manage the migration workflow along with several other supporting AWS resources (AWS IAM roles, Amazon SNS topic, and an Amazon S3 bucket for EMR logs). In addition to the standard AWS resources, a [CloudFormation Custom Resource](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-custom-resources.html), via AWS Lambda, is used to validate the existence of the source S3 Bucket and AWS Glue Table. Once deployed, the user manually starts the EMREC2StateMachine workflow which deploys an EMR cluster, starts an Apache Spark job execution on the deployed cluster, and finally deletes the cluster once the migration is completed. The Apache Spark job uses CTAS (Create Table as Select) to migrate the Iceberg data from the source S3 Bucket to the target S3 Tables Bucket. Throughout the migration process, the Step Function sends status notifications via SNS to the user.
 
 Upon completion, the Step Function send an email via SNS to the user that the workflow has completed, and the EMR Cluster is then terminated by the EMREC2StateMachine Step Function task.
 
@@ -60,7 +62,7 @@ Upon completion, the Step Function send an email via SNS to the user that the wo
 ## Costs and Licenses
 While utilizing this guidance sample code doesn't incur any direct charges, please be aware that you will incur costs for the AWS services or resources activated by this guidance architecture. The cost will vary based upon the amount of data that requires migration, number of objects, and the size of the EMR cluster creation.
 
-In this cost example, we examine the cost over a month for a 1TiB S3 Bucket migration with updates creating 1,000 new data files with an average object size of 5 MB and 3 metadata files with an average object size of 10 K. The table users frequently perform queries on the data-set and generate 500,000 GET requests per month. To optimize query performance, automatic compaction is enabled. In addition we are including the cost of a Small EMR Cluster option, detailed below in deployment costs, for the duration of the migration.
+In this cost example, we examine the cost over a month for a 1TiB S3 Bucket migration with updates creating 1,000 new data files with an average object size of 5 MB and 3 metadata files with an average object size of 10 KB. The table users frequently perform queries on the data-set and generate 500,000 GET requests per month. To optimize query performance, automatic compaction is enabled. In addition we are including the cost of a Small EMR Cluster option, detailed below in deployment costs, for the duration of the migration.
 
 ### Example Costs
 
@@ -195,9 +197,9 @@ aws cloudformation create-stack --stack-name s3TablesMigration --template-body f
 
 ### 2. Upload PySpark Script
 - Go to Stack Resources and locate the solution EMR log Bucket
-- Upload the PySpark script from the repo to:
+- Upload the PySpark script from the [scripts](scripts/pyspark/mys3tablespysparkscript.py) repo to:
 
-> resources/script/mys3tablespysparkscript.py
+> resources/scripts/mys3tablespysparkscript.py
 
 ### 3. Start Step Function Execution
 - In Stack Resources, find and click on "EMREC2StateMachine" link
@@ -214,8 +216,8 @@ Choose one of these methods to monitor:
 > **Tip:** Keep an eye on the SNS notifications for important updates about the migration process.
 
 ---
-<a name="undeployment-steps"></a>
-## Undeployment Steps
+<a name="Cleanup"></a>
+## Cleanup
 In order to un-deploy the guidance code from your AWS account, the following steps have to be made:
 
 1. Through the AWS Manager console, you can navigate to CloudFormation in the console, choose the stack as named at deployment, and choose Delete.
@@ -226,7 +228,7 @@ aws cloudformation delete-stack --stack-name s3TablesMigration
 ```
 Or if you have named the stack something else, replace "s3TablesMigration" with that stack name.
 
-**Once deleted, the resources associated with the migration solution are no longer available, but the S3 Tables data is retained.**
+**Once deleted, the resources associated with the migration solution are no longer available, but the S3 Tables data and the EMR Logs S3 bucket are retained.**
 
 ---
 

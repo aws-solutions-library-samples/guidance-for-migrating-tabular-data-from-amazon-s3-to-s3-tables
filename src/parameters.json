@@ -1,0 +1,50 @@
+[
+  {
+    "ParameterKey": "YourS3Bucket",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "S3TableBucket",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "S3TableBucketNamespace",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "S3TableBucketTables",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "S3TableBucketTablesPartitions",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "YourExistingGlueDatabase",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "YourExistingGlueTable",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "ClusterSize",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "MigrationType",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "RecipientEmail",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "subnetIDs",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "KeyPair",
+    "ParameterValue": ""
+  }
+]

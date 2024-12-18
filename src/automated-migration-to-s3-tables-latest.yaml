@@ -33,9 +33,6 @@ Metadata:
           - YourS3Bucket
           - YourExistingGlueDatabase
           - YourExistingGlueTable      
-          - YourExistingGlueTablePartitionName
-          - YourExistingGlueTablePartitionValue       
-
 
       -
         Label:
@@ -65,6 +62,15 @@ Metadata:
         Parameters:
           - ClusterSize
 
+      -
+        Label:
+          default: "EMR Instance Networking and Primary Node Keypair"
+        Parameters:
+          - subnetIDs
+          - KeyPair
+
+
+
 
     ParameterLabels:
       YourS3Bucket:
@@ -80,21 +86,6 @@ Parameters:
     Type: String
     AllowedPattern: '^[a-z0-9.-]{3,63}$'
     ConstraintDescription: Bucket name must contain only lowercase letters, numbers, periods (.), and dashes (-). Visit Amazon S3 User Guide 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html' 
-
-
-  YourExistingGlueTablePartitionName:
-    Description: Please specify the existing Table partition Name you want to migrate. Leave the predefined value to migrate the entire table
-    Type: String
-    MinLength: '1'
-    MaxLength: '1024'    
-    Default: NotApplicable
-
-  YourExistingGlueTablePartitionValue:
-    Description: Please specify the existing Table partition Value you want to migrate. Leave the predefined value to migrate the entire table
-    Type: String
-    MinLength: '1'
-    MaxLength: '1024'      
-    Default: NotApplicable 
 
   
   S3TableBucket:
@@ -128,6 +119,7 @@ Parameters:
     Description: Please enter your desired S3 Tables Table Partitions. This is needed since CTAS does not preserve source Partition information
     Type: String
     Default: NotApplicable
+    ConstraintDescription: Please provide your desired destination S3Table Table Partition information or type NotApplicable to ignore
 
 
   YourExistingGlueDatabase:
@@ -163,8 +155,7 @@ Parameters:
   MigrationType:
     AllowedValues:
       - New-Migration
-      - Update-Insert
-    Description: Please choose your desired migration type. Choose New-Migration to use CTAS to migrate to a new S3TablesBucket namespace or Update-Insert to load into existing namespace
+    Description: New-Migration use CTAS [Create Table As Select] to migrate to a new Amazon S3Table Buckets namespace and table
     Type: String
     Default: New-Migration   
 
@@ -174,6 +165,19 @@ Parameters:
     Type: String
     MinLength: '5'
     MaxLength: '150'
+    ConstraintDescription: Please enter a valid email address
+
+  subnetIDs:
+    Description: Please choose exactly two Subnets, EMR will evaluate and deploy into only one of the subnets. Please review EMR Documentation for guidance.
+    Type: List<AWS::EC2::Subnet::Id>    
+    MinLength: '1'
+    ConstraintDescription: Please specify exactly two SubnetIDs
+
+  KeyPair:
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Description: Please choose a KeyPair to enable SSH Access into EMR Primary Node.
+    MinLength: '1'
+    ConstraintDescription: Please specify an EC2 Keypair name
 
 
 Mappings:
@@ -189,11 +193,14 @@ Mappings:
       releaselabel: emr-7.5.0
     Small:
       PrimaryInstanceCount: 1
-      PrimaryInstanceType: m6gd.4xlarge
+      PrimaryInstanceType: m5.4xlarge
+      PrimaryInstanceType2: m5d.4xlarge
       CoreInstanceCount: 1
       CoreInstanceType: i3.4xlarge
+      CoreInstanceType2: r5d.4xlarge
       TaskInstanceCount: 1
       TaskInstanceType: i3.4xlarge
+      TaskInstanceType2: r5d.4xlarge
       executorMemory: 24G
       executorCores: 4
       driverMemory: 24G
@@ -208,10 +215,13 @@ Mappings:
     Medium:
       PrimaryInstanceCount: 1
       PrimaryInstanceType: m5.4xlarge
+      PrimaryInstanceType2: m5d.4xlarge
       CoreInstanceCount: 4
       CoreInstanceType: i3.4xlarge
+      CoreInstanceType2: r5d.4xlarge
       TaskInstanceCount: 4
       TaskInstanceType: i3.4xlarge   
+      TaskInstanceType2: r5d.4xlarge
       executorMemory: 24G
       executorCores: 4
       driverMemory: 24G
@@ -224,12 +234,15 @@ Mappings:
 
   
     Large:
-      PrimaryInstanceCount: 3
+      PrimaryInstanceCount: 1
       PrimaryInstanceType: r5.4xlarge
+      PrimaryInstanceType2: i3.4xlarge
       CoreInstanceCount: 4
       CoreInstanceType: i3.4xlarge
+      CoreInstanceType2: r5d.4xlarge
       TaskInstanceCount: 8
       TaskInstanceType: i3.4xlarge  
+      TaskInstanceType2: r5d.4xlarge
       executorMemory: 24G
       executorCores: 3
       driverMemory: 32G
@@ -242,12 +255,15 @@ Mappings:
 
  
     Xlarge:
-      PrimaryInstanceCount: 3
+      PrimaryInstanceCount: 1
       PrimaryInstanceType: r5.4xlarge
+      PrimaryInstanceType2: i3.4xlarge
       CoreInstanceCount: 8
       CoreInstanceType: i3.4xlarge
+      CoreInstanceType2: r5d.4xlarge
       TaskInstanceCount: 12
       TaskInstanceType: i3.4xlarge 
+      TaskInstanceType2: r5d.4xlarge
       executorMemory: 28G
       executorCores: 4
       driverMemory: 48G
@@ -467,68 +483,6 @@ Resources:
 
 ################################################ Code Ends ####################################################
 
-################################ StackNametoLower #######################################################
-
-
-  StackNametoLower:
-    Type: Custom::NametoLower
-    Properties:
-      ServiceToken: !GetAtt NametoLower.Arn
-      stackname: !Ref AWS::StackName    
-
-
-  NametoLowerIAMRole:
-    DependsOn:
-      - CheckResourceExists  
-    Type: AWS::IAM::Role
-    Properties:
-      Policies:
-        - PolicyName: AWSLambdaBasicExecutionRole
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Action:
-                  - 'logs:CreateLogGroup'
-                  - 'logs:CreateLogStream'
-                  - 'logs:PutLogEvents'                  
-                Resource: !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
-                Effect: Allow       
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: "Allow"
-            Principal:
-              Service:
-                - "lambda.amazonaws.com"
-            Action:
-              - "sts:AssumeRole"
-
-
-  NametoLower:
-    DependsOn:
-      - CheckResourceExists     
-    Type: 'AWS::Lambda::Function'
-    Properties:
-      Architectures:
-        - arm64
-      Description: Enforces Lower case for Stackname
-      MemorySize: 128
-      Runtime: python3.12
-      Handler: index.lambda_handler
-      Role: !GetAtt NametoLowerIAMRole.Arn
-      Timeout: 30
-      Code:
-        ZipFile: |
-          import cfnresponse
-
-
-          def lambda_handler(event, context):
-              to_lower = event['ResourceProperties'].get('stackname', '').lower()
-              responseData = dict(change_to_lower=to_lower)
-              cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
-
-################################# Code Ends ############################################################
-
 
   EMRLogS3Bucket:
     DependsOn:
@@ -693,8 +647,7 @@ Resources:
             parser.add_argument('--data_destination_s3tables_namespace', help="Destination S3 Tables Namespace/Database.")
             parser.add_argument('--data_destination_s3tables_tbl', help="Destination S3 Tables Table name .")
             parser.add_argument('--data_destination_s3tables_partitions', help="Destination S3 Tables Table Partitions .")
-            parser.add_argument('--data_source_tbl_partition_name', help="Source Data Table Partition Name .")
-            parser.add_argument('--data_source_tbl_partition_value', help="Source Data Table Partition Value .")
+
 
             # Initiate ARGS
             args = parser.parse_args()
@@ -709,8 +662,6 @@ Resources:
             data_destination_s3tables_namespace = args.data_destination_s3tables_namespace
             data_destination_s3tables_tbl = args.data_destination_s3tables_tbl
             data_destination_s3tables_partitions = args.data_destination_s3tables_partitions
-            data_source_tbl_partition_name = args.data_source_tbl_partition_name
-            data_source_tbl_partition_value = args.data_source_tbl_partition_value
 
             # Create Spark Configuration Set
             conf = SparkConf() \
@@ -727,28 +678,7 @@ Resources:
             # Initiate PySpark Session
             spark = SparkSession.builder.appName("MyMigrationApp").config(conf=conf).getOrCreate()
 
-
-            # Function for performing INSERT/UPDATE into an existing destination Database/Table
-            def insert_update_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
-                """
-                Use INSERT/UPDATE to load data from source to S3 Tables Bucket
-                :param:
-                """
-
-                try:
-                    # Do a CTAS to migrate table data from source Hive to a new Iceberg Table
-                    sql_query_insert = f"""
-                    INSERT INTO
-                    `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
-                    AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
-                    """
-                    # Run the INSERT INTO SQL query
-                    spark_sql_query_insert = spark.sql(sql_query_insert)
-                except Exception as e:
-                    print(e, exc_info=True)
-                    raise e
-
-
+            # Function for creating a New NameSpace in Amazon S3 Table Bucket
             def create_namespace(catalog, dst_db): 
                 # Create a NameSpace in S3 Table Buckets first
                 try:
@@ -760,13 +690,13 @@ Resources:
                     # Now run the query
                     spark_sql_query_namespace = spark.sql(sql_query_namespace)                    
                 except Exception as e:
-                    print(e, exc_info=True)
+                    print(e)
                     raise e                       
 
 
 
             # Function for performing CTAS - CREATE TABLE AS SELECT into a new destination Database/Table - creates a new DB/Table
-            def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
+            def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
                 """
                 Use CTAS to load data from source to S3 Tables Bucket
                 :param:
@@ -776,18 +706,33 @@ Resources:
                 print(f"Creating the namespace {{dst_db}} first if it does not already exist....")
                 create_namespace(catalog, dst_db)
                 print(f"Creating the namespace {{dst_db}} is successful proceeding to CTAS, please hold...")
+
                 try:
-                    # Do a CTAS to migrate table data from source Hive to a new Iceberg Table
-                    sql_query_d = f"""
-                    CREATE TABLE IF NOT EXISTS
-                    `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
-                    USING iceberg
-                    AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
-                    """
+                    # Do a CTAS to migrate table data from source Table to S3 Tables Bucket
+                    # If destination partition is provided, them include partition info in CTAS query
+                    sql_query_d = ''
+                    # Check the provided partition name and value for the destination Table
+                    if dst_partitions:
+                        if dst_partitions == "NotApplicable":
+                            sql_query_d = f"""
+                            CREATE TABLE IF NOT EXISTS
+                            `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
+                            USING iceberg
+                            AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
+                            """
+                        else:
+                            sql_query_d = f"""
+                            CREATE TABLE IF NOT EXISTS
+                            `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
+                            USING iceberg
+                            PARTITIONED BY {{dst_partitions}}
+                            AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
+                            """
+
                     # Run the CTAS SQL query
                     spark_sql_query_d = spark.sql(sql_query_d)
                 except Exception as e:
-                    print(e, exc_info=True)
+                    print(e)
                     raise e
                 else:
                     print(f"Create Table as Select (CTAS) completed....")
@@ -815,10 +760,10 @@ Resources:
                     # Run Spark SQL Query
                     spark_sql_query_data = spark.sql(sql_query_data)
                 except Exception as e:
-                    print(e, exc_info=True)
+                    print(e)
                     raise e
                 else:
-                    return spark_sql_query_data.show()
+                    return spark_sql_query_data
 
 
             # Main workflow Function, calls other functions as needed
@@ -829,28 +774,25 @@ Resources:
                 """
                 try:
                     # First let's query the source table
+                    print(f"Let do a test query of the source table {{data_source_db}}.{{data_source_tbl}} to see if we can perform a successful query")
                     query_table_data(None, data_source_db, data_source_tbl)
-                    # Depending on the Migration Type, let's choose the CTAS or Insert into/Update
+                    print(f"Test query of the source table {{data_source_db}}.{{data_source_tbl}} is successful proceeding to main task")
+                    # Choose the CTAS option to create new Amazon S3 Table Bucket destination NameSpace and Table
                     if data_migration_type == 'New-Migration':
                         print(f"We are performing a new migration, so will use CTAS to create a new table and load data")
                         ctas_action(data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
-                                    data_destination_s3tables_tbl
+                                    data_destination_s3tables_tbl, data_destination_s3tables_partitions
                                     )
 
-                    elif data_migration_type == 'Update-Insert':
-                        print(f"We are performing an INSERT INTO/UPDATE, the destination table already exists")
-                        insert_update_action(data_destination_catalog, data_source_db, data_source_tbl,
-                                            data_destination_s3tables_namespace,
-                                            data_destination_s3tables_tbl
-                                            )
-                    # Now we are done with CTAS or INSERT, let's perform some verifications on the destination Table
+                    # Now we are done with CTAS, let's perform some verifications on the destination Table
                     # Let's query the destination table
                     print(f"Let do a test query of the destination table {{data_destination_s3tables_namespace}}.{{data_destination_s3tables_tbl}} to see if we can perform a successful query")
                     query_table_data(data_destination_catalog, data_destination_s3tables_namespace, data_destination_s3tables_tbl)
+                    print(f"Test query of the destination table {{data_destination_s3tables_namespace}}.{{data_destination_s3tables_tbl}} is successful!! ")
                     """ Migration and verification was successful!"""
 
                 except Exception as e:
-                    print(e, exc_info=True)
+                    print(e)
                     sys.exit(1)
                 else:
                     # Finalize Job
@@ -933,6 +875,7 @@ Resources:
                   - elasticmapreduce:DescribeCluster
                   - elasticmapreduce:AddJobFlowSteps
                   - elasticmapreduce:DescribeStep
+                  - elasticmapreduce:AddTags
                 Resource: !Sub arn:${AWS::Partition}:elasticmapreduce:${AWS::Region}:${AWS::AccountId}:cluster/*
         - PolicyName: AllowServiceLinkedRole      
           PolicyDocument:
@@ -980,6 +923,7 @@ Resources:
                     "Name": "MigratetoS3Tables",
                     "VisibleToAllUsers": true,
                     "ReleaseLabel": "${EMRReleaseLabel}",
+                    "Tags": [{"Key":"for-use-with-amazon-emr-managed-policies", "Value": "true"}],
                     "Applications": [
                       {
                         "Name": "Hive"
@@ -989,7 +933,7 @@ Resources:
                       },
                       {
                         "Name": "Livy"
-                      },
+                      },                      
                       {
                         "Name": "Spark"
                       }
@@ -1039,6 +983,8 @@ Resources:
                     "LogUri": "s3://${EMRLogS3Bucket}/logs/",
                     "Instances": {
                       "KeepJobFlowAliveWhenNoSteps": true,
+                      "Ec2SubnetIds": ["${SubnetIDOne}", "${SubnetIDTwo}"],
+                      "Ec2KeyName": "${InstanceKeyPair}",
                       "InstanceFleets": [
                         {
                           "Name": "MyPrimaryFleet",
@@ -1046,8 +992,35 @@ Resources:
                           "TargetOnDemandCapacity": ${EMRPryInstanceCount},
                           "InstanceTypeConfigs": [
                             {
-                              "InstanceType": "${EMRPryInstanceType}"
-                            }
+                              "InstanceType": "${EMRPryInstanceType}",
+                              "WeightedCapacity": 1,
+                              "EbsConfiguration": {
+                                  "EbsBlockDeviceConfigs": [
+                                  {
+                                      "VolumeSpecification": {
+                                          "VolumeType": "gp3",
+                                          "SizeInGB": 32
+                                      },
+                                      "VolumesPerInstance":2
+                                  }
+                                ]
+                              }                               
+                            },
+                            {
+                              "InstanceType": "${EMRPryInstanceType2}",
+                              "WeightedCapacity": 1,
+                              "EbsConfiguration": {
+                                  "EbsBlockDeviceConfigs": [
+                                  {
+                                      "VolumeSpecification": {
+                                          "VolumeType": "gp3",
+                                          "SizeInGB": 32
+                                      },
+                                      "VolumesPerInstance":2
+                                  }
+                                ]
+                              }                               
+                            }                            
                           ]
                         },
                         {
@@ -1056,8 +1029,35 @@ Resources:
                           "TargetOnDemandCapacity": ${EMRCoreInstanceCount},
                           "InstanceTypeConfigs": [
                             {
-                              "InstanceType": "${EMRCoreInstanceType}"
-                            }
+                              "InstanceType": "${EMRCoreInstanceType}",
+                              "WeightedCapacity": 1,
+                              "EbsConfiguration": {
+                                  "EbsBlockDeviceConfigs": [
+                                  {
+                                      "VolumeSpecification": {
+                                          "VolumeType": "gp3",
+                                          "SizeInGB": 32
+                                      },
+                                      "VolumesPerInstance":4
+                                  }
+                                ]
+                              }                               
+                            },
+                            {
+                              "InstanceType": "${EMRCoreInstanceType2}",
+                              "WeightedCapacity": 1,
+                              "EbsConfiguration": {
+                                  "EbsBlockDeviceConfigs": [
+                                  {
+                                      "VolumeSpecification": {
+                                          "VolumeType": "gp3",
+                                          "SizeInGB": 32
+                                      },
+                                      "VolumesPerInstance":4
+                                  }
+                                ]
+                              }                               
+                            }                            
                           ]
                         },
                         {
@@ -1066,8 +1066,35 @@ Resources:
                           "TargetOnDemandCapacity": ${EMRTaskInstanceCount},
                           "InstanceTypeConfigs": [
                             {
-                              "InstanceType": "${EMRTaskInstanceType}"
-                            }
+                              "InstanceType": "${EMRTaskInstanceType}",
+                              "WeightedCapacity": 1,
+                              "EbsConfiguration": {
+                                  "EbsBlockDeviceConfigs": [
+                                  {
+                                      "VolumeSpecification": {
+                                          "VolumeType": "gp3",
+                                          "SizeInGB": 32
+                                      },
+                                      "VolumesPerInstance":3
+                                  }
+                                ]
+                              }                               
+                            },
+                            {
+                              "InstanceType": "${EMRTaskInstanceType2}",
+                              "WeightedCapacity": 1,
+                              "EbsConfiguration": {
+                                  "EbsBlockDeviceConfigs": [
+                                  {
+                                      "VolumeSpecification": {
+                                          "VolumeType": "gp3",
+                                          "SizeInGB": 32
+                                      },
+                                      "VolumesPerInstance":3
+                                  }
+                                ]
+                              }                               
+                            }                            
                           ]
                         }                          
                       ]
@@ -1150,7 +1177,7 @@ Resources:
                           "--master",
                           "yarn",
                           "--conf",
-                          "spark.jars.packages=org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,software.amazon.s3tables:s3-tables-catalog-for-iceberg:0.1.0",                          
+                          "spark.jars.packages=org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,software.amazon.s3tables:s3-tables-catalog-for-iceberg-runtime:0.1.3",                          
                           "${PySparkScriptURI}",
                           "--data_migration_type",
                           "${DataMigrationType}",
@@ -1169,11 +1196,7 @@ Resources:
                           "--data_destination_s3tables_tbl",
                           "${DataDestinationS3TablesTables}",
                           "--data_destination_s3tables_partitions",
-                          "${DataDestinationS3TablesPartitions}" ,
-                          "--data_source_tbl_partition_name",
-                          "${DataSourceGlueTablePartitionName}",
-                          "--data_source_tbl_partition_value",
-                          "${DataSourceGlueTablePartitionValue}"                                                                          
+                          "${DataDestinationS3TablesPartitions}"                                                                       
                         ]
                       }
                     }
@@ -1283,13 +1306,14 @@ Resources:
             DataMigrationType: !Ref MigrationType
             DataDestinationS3TablesPartitions: !Ref S3TableBucketTablesPartitions
             EMRReleaseLabel: !FindInMap [ EMR, Cluster, releaselabel ]
-            DataSourceGlueTablePartitionName: !Ref YourExistingGlueTablePartitionName
-            DataSourceGlueTablePartitionValue: !Ref YourExistingGlueTablePartitionValue
             EMRPryInstanceType: !FindInMap [EMR, !Ref ClusterSize, PrimaryInstanceType]
+            EMRPryInstanceType2: !FindInMap [EMR, !Ref ClusterSize, PrimaryInstanceType2]
             EMRPryInstanceCount: !FindInMap [EMR, !Ref ClusterSize, PrimaryInstanceCount]
             EMRCoreInstanceType: !FindInMap [EMR, !Ref ClusterSize, CoreInstanceType]
+            EMRCoreInstanceType2: !FindInMap [EMR, !Ref ClusterSize, CoreInstanceType2]
             EMRCoreInstanceCount: !FindInMap [EMR, !Ref ClusterSize, CoreInstanceCount]
             EMRTaskInstanceType: !FindInMap [EMR, !Ref ClusterSize, TaskInstanceType]
+            EMRTaskInstanceType2: !FindInMap [EMR, !Ref ClusterSize, TaskInstanceType2]
             EMRTaskInstanceCount: !FindInMap [EMR, !Ref ClusterSize, TaskInstanceCount]      
             executorMemory: !FindInMap [EMR, !Ref ClusterSize, executorMemory]  
             executorCores: !FindInMap [EMR, !Ref ClusterSize, executorCores] 
@@ -1299,7 +1323,10 @@ Resources:
             dynamicAllocMaxExec: !FindInMap [EMR, !Ref ClusterSize, dynamicAllocMaxExec]   
             driverMemoryOverhead: !FindInMap [EMR, !Ref ClusterSize, driverMemoryOverhead]  
             executorMemoryOverhead: !FindInMap [EMR, !Ref ClusterSize, executorMemoryOverhead]      
-            driverMaxResultsSize: !FindInMap [EMR, !Ref ClusterSize, driverMaxResultsSize]             
+            driverMaxResultsSize: !FindInMap [EMR, !Ref ClusterSize, driverMaxResultsSize]     
+            InstanceKeyPair: !Ref KeyPair
+            SubnetIDOne: !Select [0, !Ref subnetIDs]
+            SubnetIDTwo: !Select [1, !Ref subnetIDs]                            
 
 
 
@@ -1413,10 +1440,17 @@ Resources:
 
 
   EMRServiceRole:
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - reason: AWS Managed Policy AmazonEMRServicePolicy_v2 requires a * for some actions
+            id: W11  
     DependsOn:
-      - CheckResourceExists   
-    Type: AWS::IAM::Role
+      - CheckResourceExists  
+    Type: "AWS::IAM::Role"
     Properties:
+      Path: "/"
+      Description: "Allows Elastic MapReduce to call AWS services such as EC2 on your behalf."
       AssumeRolePolicyDocument:
         Version: 2008-10-17
         Statement:
@@ -1424,23 +1458,299 @@ Resources:
             Principal:
               Service: !Sub elasticmapreduce.${AWS::URLSuffix}
             Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Sub ${AWS::AccountId}
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:elasticmapreduce:${AWS::Region}:${AWS::AccountId}:* 
       Policies:
-        - PolicyDocument:
-            Statement:
-              - Action:
-                  - iam:CreateServiceLinkedRole
-                  - iam:PutRolePolicy
-                Effect: Allow
-                Resource: !Sub arn:${AWS::Partition}:iam::*:role/aws-service-role/elasticmapreduce.amazonaws.com*/AWSServiceRoleForEMRCleanup*
-                Condition:
-                  StringLike:
-                    iam:AWSServiceName:
-                    - elasticmapreduce.amazonaws.com
-                    - elasticmapreduce.amazonaws.com.cn
-            Version: 2012-10-17
-          PolicyName: AllowServiceLinkedRole
-      ManagedPolicyArns:
-        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonElasticMapReduceRole        
+      - PolicyDocument:
+          Statement:
+            - Action:
+                - iam:CreateServiceLinkedRole
+                - iam:PutRolePolicy
+              Effect: Allow
+              Resource: !Sub arn:${AWS::Partition}:iam::*:role/aws-service-role/elasticmapreduce.amazonaws.com*/AWSServiceRoleForEMRCleanup*
+              Condition:
+                StringLike:
+                  iam:AWSServiceName:
+                  - elasticmapreduce.amazonaws.com
+                  - elasticmapreduce.amazonaws.com.cn
+          Version: 2012-10-17
+        PolicyName: AllowServiceLinkedRole      
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Condition:
+              StringEquals:
+                aws:ResourceTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:subnet/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:security-group/*"
+            Action:
+            - "ec2:CreateNetworkInterface"
+            - "ec2:RunInstances"
+            - "ec2:CreateFleet"
+            - "ec2:CreateLaunchTemplate"
+            - "ec2:CreateLaunchTemplateVersion"
+            Effect: "Allow"
+            Sid: "CreateInTaggedNetwork"
+          - Condition:
+              StringEquals:
+                aws:ResourceTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource: !Sub "arn:${AWS::Partition}:ec2:*:*:launch-template/*"
+            Action:
+            - "ec2:CreateFleet"
+            - "ec2:RunInstances"
+            - "ec2:CreateLaunchTemplateVersion"
+            Effect: "Allow"
+            Sid: "CreateWithEMRTaggedLaunchTemplate"
+          - Condition:
+              StringEquals:
+                aws:RequestTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource: !Sub "arn:${AWS::Partition}:ec2:*:*:launch-template/*"
+            Action: "ec2:CreateLaunchTemplate"
+            Effect: "Allow"
+            Sid: "CreateEMRTaggedLaunchTemplate"
+          - Condition:
+              StringEquals:
+                aws:RequestTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:instance/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:volume/*"
+            Action:
+            - "ec2:RunInstances"
+            - "ec2:CreateFleet"
+            Effect: "Allow"
+            Sid: "CreateEMRTaggedInstancesAndVolumes"
+          - Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:network-interface/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*::image/ami-*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:key-pair/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:capacity-reservation/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:placement-group/EMR_*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:fleet/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:dedicated-host/*"
+            - !Sub "arn:${AWS::Partition}:resource-groups:*:*:group/*"
+            Action:
+            - "ec2:RunInstances"
+            - "ec2:CreateFleet"
+            - "ec2:CreateLaunchTemplate"
+            - "ec2:CreateLaunchTemplateVersion"
+            Effect: "Allow"
+            Sid: "ResourcesToLaunchEC2"
+          - Condition:
+              StringEquals:
+                aws:ResourceTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource: !Sub "arn:${AWS::Partition}:ec2:*:*:*"
+            Action:
+            - "ec2:CreateLaunchTemplateVersion"
+            - "ec2:DeleteLaunchTemplate"
+            - "ec2:DeleteNetworkInterface"
+            - "ec2:ModifyInstanceAttribute"
+            - "ec2:TerminateInstances"
+            Effect: "Allow"
+            Sid: "ManageEMRTaggedResources"
+          - Condition:
+              StringEquals:
+                aws:ResourceTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:instance/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:volume/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:network-interface/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:launch-template/*"
+            Action:
+            - "ec2:CreateTags"
+            - "ec2:DeleteTags"
+            Effect: "Allow"
+            Sid: "ManageTagsOnEMRTaggedResources"
+          - Condition:
+              StringEquals:
+                aws:RequestTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:network-interface/*"
+            Action:
+            - "ec2:CreateNetworkInterface"
+            Effect: "Allow"
+            Sid: "CreateNetworkInterfaceNeededForPrivateSubnet"
+          - Condition:
+              StringEquals:
+                ec2:CreateAction:
+                - "RunInstances"
+                - "CreateFleet"
+                - "CreateLaunchTemplate"
+                - "CreateNetworkInterface"
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:network-interface/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:instance/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:volume/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:launch-template/*"
+            Action:
+            - "ec2:CreateTags"
+            Effect: "Allow"
+            Sid: "TagOnCreateTaggedEMRResources"
+          - Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:placement-group/EMR_*"
+            Action:
+            - "ec2:CreateTags"
+            - "ec2:DeleteTags"
+            Effect: "Allow"
+            Sid: "TagPlacementGroups"
+          - Resource: "*"
+            Action:
+            - "ec2:DescribeAccountAttributes"
+            - "ec2:DescribeCapacityReservations"
+            - "ec2:DescribeDhcpOptions"
+            - "ec2:DescribeImages"
+            - "ec2:DescribeInstances"
+            - "ec2:DescribeInstanceTypeOfferings"
+            - "ec2:DescribeLaunchTemplates"
+            - "ec2:DescribeNetworkAcls"
+            - "ec2:DescribeNetworkInterfaces"
+            - "ec2:DescribePlacementGroups"
+            - "ec2:DescribeRouteTables"
+            - "ec2:DescribeSecurityGroups"
+            - "ec2:DescribeSubnets"
+            - "ec2:DescribeVolumes"
+            - "ec2:DescribeVolumeStatus"
+            - "ec2:DescribeVpcAttribute"
+            - "ec2:DescribeVpcEndpoints"
+            - "ec2:DescribeVpcs"
+            Effect: "Allow"
+            Sid: "ListActionsForEC2Resources"
+          - Condition:
+              StringEquals:
+                aws:RequestTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:security-group/*"
+            Action:
+            - "ec2:CreateSecurityGroup"
+            Effect: "Allow"
+            Sid: "CreateDefaultSecurityGroupWithEMRTags"
+          - Condition:
+              StringEquals:
+                aws:ResourceTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:vpc/*"
+            Action:
+            - "ec2:CreateSecurityGroup"
+            Effect: "Allow"
+            Sid: "CreateDefaultSecurityGroupInVPCWithEMRTags"
+          - Condition:
+              StringEquals:
+                aws:RequestTag/for-use-with-amazon-emr-managed-policies: "true"
+                ec2:CreateAction: "CreateSecurityGroup"
+            Resource: !Sub "arn:${AWS::Partition}:ec2:*:*:security-group/*"
+            Action:
+            - "ec2:CreateTags"
+            Effect: "Allow"
+            Sid: "TagOnCreateDefaultSecurityGroupWithEMRTags"
+          - Condition:
+              StringEquals:
+                aws:ResourceTag/for-use-with-amazon-emr-managed-policies: "true"
+            Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group/*"
+            - !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:security-group-rule/*"
+            Action:
+            - "ec2:AuthorizeSecurityGroupEgress"
+            - "ec2:AuthorizeSecurityGroupIngress"
+            - "ec2:RevokeSecurityGroupEgress"
+            - "ec2:RevokeSecurityGroupIngress"
+            Effect: "Allow"
+            Sid: "ManageSecurityGroups"
+          - Resource: !Sub "arn:${AWS::Partition}:ec2:*:*:placement-group/EMR_*"
+            Action:
+            - "ec2:CreatePlacementGroup"
+            Effect: "Allow"
+            Sid: "CreateEMRPlacementGroups"
+          - Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:placement-group/*"
+            Action:
+            - "ec2:DeletePlacementGroup"
+            Effect: "Allow"
+            Sid: "DeletePlacementGroups"
+          - Resource: "*"
+            Action:
+            - "application-autoscaling:DescribeScalableTargets"
+            - "application-autoscaling:DescribeScalingPolicies"
+            Effect: "Allow"
+            Sid: "AutoScaling"
+          - Resource: !Sub "arn:${AWS::Partition}:application-autoscaling:${AWS::Region}:${AWS::AccountId}:scalable-target/*"
+            Action:
+            - "application-autoscaling:DeleteScalingPolicy"
+            - "application-autoscaling:DeregisterScalableTarget"
+            - "application-autoscaling:PutScalingPolicy"
+            - "application-autoscaling:RegisterScalableTarget"
+            Effect: "Allow"
+            Sid: "AutoScaling2"
+          - Resource: !Sub "arn:${AWS::Partition}:resource-groups:${AWS::Region}:${AWS::AccountId}:group/*"
+            Action:
+            - "resource-groups:ListGroupResources"
+            Effect: "Allow"
+            Sid: "ResourceGroupsForCapacityReservations"
+          - Resource: !Sub "arn:${AWS::Partition}:cloudwatch:*:*:alarm:*_EMR_Auto_Scaling"
+            Action:
+            - "cloudwatch:PutMetricAlarm"
+            - "cloudwatch:DeleteAlarms"
+            - "cloudwatch:DescribeAlarms"
+            Effect: "Allow"
+            Sid: "AutoScalingCloudWatch"
+          - Condition:
+              StringLike:
+                iam:PassedToService: "application-autoscaling.amazonaws.com*"
+            Resource: !Sub "arn:${AWS::Partition}:iam::*:role/EMR_AutoScaling_DefaultRole"
+            Action: "iam:PassRole"
+            Effect: "Allow"
+            Sid: "PassRoleForAutoScaling"
+          - Condition:
+              StringLike:
+                iam:PassedToService: "ec2.amazonaws.com*"
+            Resource: !Sub "arn:${AWS::Partition}:iam::*:role/EMR_EC2_DefaultRole"
+            Action: "iam:PassRole"
+            Effect: "Allow"
+            Sid: "PassRoleForEC2"
+        PolicyName: "EMRServicePolicyfromManagedV2"
+      - PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+          - Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:subnet/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:security-group/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:security-group/*"
+            Action:
+            - "ec2:CreateNetworkInterface"
+            - "ec2:RunInstances"
+            - "ec2:CreateFleet"
+            - "ec2:CreateLaunchTemplate"
+            - "ec2:CreateLaunchTemplateVersion"
+            Effect: "Allow"
+            Sid: "CreateInNetwork"
+          - Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:security-group/*"
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:security-group/*"
+            Action:
+            - "ec2:AuthorizeSecurityGroupEgress"
+            - "ec2:AuthorizeSecurityGroupIngress"
+            - "ec2:RevokeSecurityGroupEgress"
+            - "ec2:RevokeSecurityGroupIngress"
+            Effect: "Allow"
+            Sid: "ManageSecurityGroups"
+          - Resource:
+            - !Sub "arn:${AWS::Partition}:ec2:*:*:vpc/*"
+            Action:
+            - "ec2:CreateSecurityGroup"
+            Effect: "Allow"
+            Sid: "CreateDefaultSecurityGroupInVPC"
+          - Condition:
+              StringLike:
+                iam:PassedToService: "ec2.amazonaws.com"
+            Resource: !GetAtt EMREc2Role.Arn
+            Action: "iam:PassRole"
+            Effect: "Allow"
+            Sid: "PassRoleForEC2"
+        PolicyName: "EMRServiceRolePolicy1"
+
+
+     
 
 
 
@@ -1454,15 +1764,18 @@ Resources:
 Outputs:
   BucketName:
     Value: !Ref EMRLogS3Bucket
-    Description: Solution Amazon S3 Bucket to Upload Manifest and Access Batch Operations Job Reports.
+    Description: Solution Amazon S3 Bucket to store the EMR Spark Submit PySpark Script and the EMR Logs
 
   EMREC2StateMachineArn:
     Value: !Ref EMREC2StateMachine
+    Description: StateMachine ARN. Please goto AWS Step Function Management Console, choose this State Machine and Start Execution to commence Migration
 
   EMREC2RoleArn:
     Value: !GetAtt EMREc2Role.Arn
+    Description: EMR Cluster EC2 Role. Please remember to grant this role access to KMS encryptions keys on your source bucket!
 
   PySparkScriptURI:
     Value: !Join ['', ['s3://', !Ref EMRLogS3Bucket, '/', !FindInMap [ PySpark, Script, s3key ] ]]  
+    Description: Location of the EMR Spark-Submit PySpark script. 
 
     
