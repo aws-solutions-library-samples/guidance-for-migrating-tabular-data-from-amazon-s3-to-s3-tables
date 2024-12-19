@@ -115,6 +115,8 @@ The following table provides a sample cost breakdown for deploying this guidance
 
 ## Prerequisites
 
+Before starting table migration, we strongly recommend to stop active write operations on the target table. This prevents data inconsistencies and loss of new updates during migration. Pause any applications, processes, or scheduled jobs that modify the table. Only proceed with migration after confirming all write operations have ceased to ensure data integrity. 
+
 Before getting started with the migration process, ensure the following is in place:
 
 1. **AWS Account**: An active [AWS account](https://aws.amazon.com/account/) to deploy the necessary resources and services.
