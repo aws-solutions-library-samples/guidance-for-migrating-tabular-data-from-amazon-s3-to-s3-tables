@@ -1,4 +1,48 @@
+import cfnresponse
+import boto3
+import io
+import json
+import logging
+import uuid
+import os
+from botocore.client import Config
+from botocore.exceptions import ClientError
+from boto3.s3.transfer import TransferConfig
 
+# Enable Debug logging
+boto3.set_stream_logger('')
+
+# Setup Logging
+logger = logging.getLogger(__name__)
+logger.setLevel('INFO')
+
+# Define Environmental Variables
+my_asset1_key = str(os.environ['asset1_key'])
+my_bucket = str(os.environ['s3BuckettoDownload'])
+my_max_attempts = int(os.environ['max_attempts'])
+my_region = str(os.environ['AWS_REGION'])
+
+
+# Set and Declare Configuration Parameters
+config = Config(retries={'max_attempts': my_max_attempts})
+
+# Set Service Clients
+s3 = boto3.resource('s3', config=config)
+
+
+# Upload PySpark Script to Solution S3 Bucket
+def stream_to_s3(bucket, key, body):
+    logger.info(f'Starting PySpark Script upload to the S3 Bucket: s3://{bucket}/{key}')
+    try:
+        upload_to_s3 = s3.Object(bucket, key).put(Body=body)
+    except Exception as e:
+        logger.error(e)
+    else:
+        logger.info(f'Object successfully uploaded to s3://{bucket}/{key}')
+
+
+# Define PySpark Script to Upload as blob
+my_blob = f'''
 import sys
 import argparse
 from pyspark.sql import SparkSession
@@ -37,7 +81,14 @@ data_destination_s3tables_tbl = args.data_destination_s3tables_tbl
 data_destination_s3tables_partitions = args.data_destination_s3tables_partitions
 
 # Create Spark Configuration Set
-conf = SparkConf()     .set("spark.sql.catalogImplementation", "hive")     .set("mapreduce.input.fileinputformat.input.dir.recursive", "true")     .set(f"spark.sql.catalog.{data_destination_catalog}", "org.apache.iceberg.spark.SparkCatalog")     .set(f"spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")     .set(f"spark.sql.catalog.{data_destination_catalog}.catalog-impl", "software.amazon.s3tables.iceberg.S3TablesCatalog")     .set(f"spark.sql.catalog.{data_destination_catalog}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")     .set(f"spark.sql.catalog.{data_destination_catalog}.warehouse", data_destination_s3tables_arn) 
+conf = SparkConf() \
+    .set("spark.sql.catalogImplementation", "hive") \
+    .set("mapreduce.input.fileinputformat.input.dir.recursive", "true") \
+    .set(f"spark.sql.catalog.{{data_destination_catalog}}", "org.apache.iceberg.spark.SparkCatalog") \
+    .set(f"spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .set(f"spark.sql.catalog.{{data_destination_catalog}}.catalog-impl", "software.amazon.s3tables.iceberg.S3TablesCatalog") \
+    .set(f"spark.sql.catalog.{{data_destination_catalog}}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
+    .set(f"spark.sql.catalog.{{data_destination_catalog}}.warehouse", data_destination_s3tables_arn) 
 
 
 
@@ -51,7 +102,7 @@ def create_namespace(catalog, dst_db):
         # Create the Namespace first
         sql_query_namespace = f"""
         CREATE NAMESPACE IF NOT EXISTS
-        `{catalog}`.`{dst_db}`
+        `{{catalog}}`.`{{dst_db}}`
         """        
         # Now run the query
         spark_sql_query_namespace = spark.sql(sql_query_namespace)                    
@@ -67,11 +118,11 @@ def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
     Use CTAS to load data from source to S3 Tables Bucket
     :param:
     """
-    print(f"Echo parameters catalog={catalog}, src_db={src_db}, src_tbl={src_tbl}, dst_db={dst_db}, dst_tbl={dst_tbl}")
+    print(f"Echo parameters catalog={{catalog}}, src_db={{src_db}}, src_tbl={{src_tbl}}, dst_db={{dst_db}}, dst_tbl={{dst_tbl}}")
     # We need to create the namespace/database first, so calling the namespace function
-    print(f"Creating the namespace {dst_db} first if it does not already exist....")
+    print(f"Creating the namespace {{dst_db}} first if it does not already exist....")
     create_namespace(catalog, dst_db)
-    print(f"Creating the namespace {dst_db} is successful proceeding to CTAS, please hold...")
+    print(f"Creating the namespace {{dst_db}} is successful proceeding to CTAS, please hold...")
 
     try:
         # Do a CTAS to migrate table data from source Table to S3 Tables Bucket
@@ -82,17 +133,17 @@ def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
             if dst_partitions == "NotApplicable":
                 sql_query_d = f"""
                 CREATE TABLE IF NOT EXISTS
-                `{catalog}`.`{dst_db}`.`{dst_tbl}`
+                `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
                 USING iceberg
-                AS SELECT * FROM `{src_db}`.`{src_tbl}` 
+                AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
                 """
             else:
                 sql_query_d = f"""
                 CREATE TABLE IF NOT EXISTS
-                `{catalog}`.`{dst_db}`.`{dst_tbl}`
+                `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
                 USING iceberg
-                PARTITIONED BY {dst_partitions}
-                AS SELECT * FROM `{src_db}`.`{src_tbl}` 
+                PARTITIONED BY {{dst_partitions}}
+                AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
                 """
 
         # Run the CTAS SQL query
@@ -113,12 +164,12 @@ def query_table_data(catalog, db, tbl):
     # Handle query with or without catalog name provided
     if catalog:
         sql_query_data = f"""SELECT * 
-        FROM `{catalog}`.`{db}`.`{tbl}`
+        FROM `{{catalog}}`.`{{db}}`.`{{tbl}}`
         limit 10
         """
     else:
         sql_query_data = f"""SELECT * 
-        FROM `{db}`.`{tbl}`
+        FROM `{{db}}`.`{{tbl}}`
         limit 10
         """
 
@@ -140,9 +191,9 @@ def initiate_workflow():
     """
     try:
         # First let's query the source table
-        print(f"Let do a test query of the source table {data_source_db}.{data_source_tbl} to see if we can perform a successful query")
+        print(f"Let do a test query of the source table {{data_source_db}}.{{data_source_tbl}} to see if we can perform a successful query")
         query_table_data(None, data_source_db, data_source_tbl)
-        print(f"Test query of the source table {data_source_db}.{data_source_tbl} is successful proceeding to main task")
+        print(f"Test query of the source table {{data_source_db}}.{{data_source_tbl}} is successful proceeding to main task")
         # Choose the CTAS option to create new Amazon S3 Table Bucket destination NameSpace and Table
         if data_migration_type == 'New-Migration':
             print(f"We are performing a new migration, so will use CTAS to create a new table and load data")
@@ -152,9 +203,9 @@ def initiate_workflow():
 
         # Now we are done with CTAS, let's perform some verifications on the destination Table
         # Let's query the destination table
-        print(f"Let do a test query of the destination table {data_destination_s3tables_namespace}.{data_destination_s3tables_tbl} to see if we can perform a successful query")
+        print(f"Let do a test query of the destination table {{data_destination_s3tables_namespace}}.{{data_destination_s3tables_tbl}} to see if we can perform a successful query")
         query_table_data(data_destination_catalog, data_destination_s3tables_namespace, data_destination_s3tables_tbl)
-        print(f"Test query of the destination table {data_destination_s3tables_namespace}.{data_destination_s3tables_tbl} is successful!! ")
+        print(f"Test query of the destination table {{data_destination_s3tables_namespace}}.{{data_destination_s3tables_tbl}} is successful!! ")
         """ Migration and verification was successful!"""
 
     except Exception as e:
@@ -169,3 +220,35 @@ def initiate_workflow():
 if __name__ == "__main__":
     # Start the Main Task
     initiate_workflow()
+'''
+# End F String and PySpark Blob
+
+# Initiating Main Function
+def lambda_handler(event, context):
+    logger.info(f'Event detail is: {event}')
+    # Start Cloudformation Invocation #
+    if event.get('RequestType') == 'Create':
+        # logger.info(event)
+        try:
+            logger.info("Stack event is Create or Update, Uploading PySpark to S3 Bucket...")
+            # Now upload the Script to the Solution Amazon S3 Bucket!.
+            stream_to_s3(my_bucket, my_asset1_key, my_blob)
+
+            responseData = {}
+            responseData['message'] = "Successful"
+            logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+            cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
+        except Exception as e:
+            logger.error(e)
+            responseData = {}
+            responseData['message'] = str(e)
+            failure_reason = str(e)
+            logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+            cfnresponse.send(event, context, cfnresponse.FAILED, responseData, reason=failure_reason)
+
+    else:
+        logger.info(f"Stack event is Update or Delete, nothing to do....")
+        responseData = {}
+        responseData['message'] = "Completed"
+        logger.info(f"Sending Invocation Response {responseData['message']} to Cloudformation Service")
+        cfnresponse.send(event, context, cfnresponse.SUCCESS, responseData)
