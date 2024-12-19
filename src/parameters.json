@@ -4,22 +4,6 @@
     "ParameterValue": ""
   },
   {
-    "ParameterKey": "S3TableBucket",
-    "ParameterValue": ""
-  },
-  {
-    "ParameterKey": "S3TableBucketNamespace",
-    "ParameterValue": ""
-  },
-  {
-    "ParameterKey": "S3TableBucketTables",
-    "ParameterValue": ""
-  },
-  {
-    "ParameterKey": "S3TableBucketTablesPartitions",
-    "ParameterValue": ""
-  },
-  {
     "ParameterKey": "YourExistingGlueDatabase",
     "ParameterValue": ""
   },
@@ -28,15 +12,27 @@
     "ParameterValue": ""
   },
   {
-    "ParameterKey": "ClusterSize",
+    "ParameterKey": "S3TableBucket",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "S3TableBucketNamespace",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "S3TableBucketTable",
+    "ParameterValue": ""
+  },
+  {
+    "ParameterKey": "S3TableBucketTablesPartitions",
     "ParameterValue": ""
   },
   {
     "ParameterKey": "MigrationType",
-    "ParameterValue": ""
+    "ParameterValue": "New-Migration"
   },
   {
-    "ParameterKey": "RecipientEmail",
+    "ParameterKey": "ClusterSize",
     "ParameterValue": ""
   },
   {
@@ -45,6 +41,10 @@
   },
   {
     "ParameterKey": "KeyPair",
+    "ParameterValue": ""
+  },
+    {
+    "ParameterKey": "RecipientEmail",
     "ParameterValue": ""
   }
 ]
