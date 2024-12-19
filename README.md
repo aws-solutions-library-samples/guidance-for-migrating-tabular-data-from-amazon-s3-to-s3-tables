@@ -11,10 +11,10 @@
 3. [Deployment Steps](#deployment-steps)
 4. [Deployment Validation](#deployment-validation)
 5. [Running the Guidance](#running-the-guidance)
-5. [Cleanup](#cleanup) 
-6. [Customer responsibility](#customer-responsibility)
-7. [Feedback](#feedback)
-8. [Notices](#notices)
+6. [Cleanup](#cleanup) 
+7. [Customer responsibility](#customer-responsibility)
+8. [Feedback](#feedback)
+9. [Notices](#notices)
 
 ---
 
@@ -410,6 +410,10 @@ If the deployment fails, refer to [Troubleshooting a failed deployment](#trouble
 - In the EMR console, go to "Cluster Settings" and enable "CloudWatch Logs integration"
 <br></br>
 **Remember** to keep the AWS Management Console open in a separate tab or window so you can easily switch between the Step Functions and EMR consoles as needed during the migration process.
+
+## Post-migration transition guidance
+
+After migration, please update all writer applications to use the new table in table buckets. We strongly recommend testing each application to confirm successful writes to the new table and gradually restarting operations, monitoring closely for any issues. You can keep the old table in read-only mode temporarily as a backup while verifying full functionality of the new setup.
 
 <a name="Cleanup"></a>
 ## Cleanup
