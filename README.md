@@ -183,14 +183,6 @@ Available Instance Classes for EMR based upon Size:
 | Large  | 24G             | 3              | 32G           | 4            | 44            |
 | XLarge | 28G             | 4              | 48G           | 4            | 74            |
 
-### Costs estimated below is based on a sample 17TB parquet data set.
-| Size   |Duration  | Estimated Cost  
-|--------|-----------------|----------------|
-| Small  | 3h57m             | $90.40              | 
-| Medium | 1h50m            | $48.20              | 
-| Large  | 48m             | $20.12              |
-| XLarge | 24m             | $9.18         |
-
 <a name="deployment-steps"></a>
 
 ## Deployment Steps
