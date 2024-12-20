@@ -11,10 +11,11 @@
 3. [Deployment Steps](#deployment-steps)
 4. [Deployment Validation](#deployment-validation)
 5. [Running the Guidance](#running-the-guidance)
-6. [Cleanup](#cleanup) 
-7. [Customer responsibility](#customer-responsibility)
-8. [Feedback](#feedback)
-9. [Notices](#notices)
+6. [Cleanup](#cleanup)
+7. [Contact AWS Support](#contact-aws-support)
+8. [Customer responsibility](#customer-responsibility)
+9. [Feedback](#feedback)
+10. [Notices](#notices)
 
 ---
 
@@ -462,6 +463,34 @@ This command lists all resources in the stack, showing their status and any reas
     - **IAM Role**
     - **S3 Bucket Access**
     - **CloudTrail Logs**
+
+## Contact AWS Support
+If you have [AWS Developer Support](https://aws.amazon.com/premiumsupport/plans/developers/), [AWS Business Support](https://aws.amazon.com/premiumsupport/plans/business/), or [AWS Enterprise Support](https://aws.amazon.com/premiumsupport/plans/enterprise/), you can use the Support Center to get expert assistance with this solution. The following sections provide instructions.
+
+Create case
+1.	Sign in to [Support Center](https://support.console.aws.amazon.com/support/home#/).
+2.	Choose **Create case**.
+
+How can we help?
+1.	Choose **Technical**.
+2.	For **Service**, select **Solutions**.
+3.	For **Category**, select **Other Solutions**.
+4.	For **Severity**, select the option that best matches your use case.
+5.	When you enter the **Service, Category**, and **Severity**, the interface populates links to common troubleshooting questions. If you can’t resolve your question with these links, choose **Next step: Additional information.**
+
+Additional information
+1.	For **Subject**, enter text summarizing your question or issue.
+2.	For **Description**, describe the issue in detail.
+3.	Choose **Attach files**.
+4.	Attach the information that AWS Support needs to process the request.
+
+Help us resolve your case faster
+1.	Enter the requested information.
+2.	Choose **Next step: Solve now or contact us.**
+
+Solve now or contact us
+1.	Review the **Solve now** solutions.
+2.	If you can’t resolve your issue with these solutions, choose **Contact us**, enter the requested information, and choose **Submit**.
 
 <a name="customer-responsibility"></a>
 ## Customer Responsibility
