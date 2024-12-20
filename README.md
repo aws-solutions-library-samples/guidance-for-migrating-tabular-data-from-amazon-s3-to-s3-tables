@@ -175,12 +175,12 @@ Available Instance Classes for EMR based upon Size:
 
 ### Cluster Performance Configuration
 
-| Size   | Executor Memory | Executor Cores | Driver Memory | Driver Cores | Min Executors | Max Executors |
-|--------|-----------------|----------------|---------------|--------------|---------------|---------------|
-| Small  | 24G             | 4              | 24G           | 4            | 2             | 7             |
-| Medium | 24G             | 4              | 24G           | 4            | 8             | 29            |
-| Large  | 24G             | 3              | 32G           | 4            | 12            | 44            |
-| XLarge | 28G             | 4              | 48G           | 4            | 20            | 74            |
+| Size   | Executor Memory | Executor Cores | Driver Memory | Driver Cores | Max Executors |
+|--------|-----------------|----------------|---------------|--------------|---------------|
+| Small  | 24G             | 4              | 24G           | 4            | 7             |
+| Medium | 24G             | 4              | 24G           | 4            | 29            |
+| Large  | 24G             | 3              | 32G           | 4            | 44            |
+| XLarge | 28G             | 4              | 48G           | 4            | 74            |
 
 ### Costs estimated below is based on a sample 17TB parquet data set.
 | Size   |Duration  | Estimated Cost  
@@ -421,9 +421,13 @@ After migration, please update all writer applications to use the new table in t
 ## Cleanup
 In order to un-deploy the guidance code from your AWS account, the following steps have to be made:
 
-1. Through the AWS Manager console, you can navigate to CloudFormation in the console, choose the stack as named at deployment, and choose Delete.
+#### AWS Management CloudFormation Console
 
-2. Though the AWS Console execute the following command:
+- Through the AWS Management Console, navigate to CloudFormation in the AWS Management Console, Select the stack as named during the deployment, and select Delete.
+
+#### AWS Cloud Shell and CLI
+
+- Through the AWS Console execute the following command:
 ```
 aws cloudformation delete-stack --stack-name s3TablesMigration
 ```
