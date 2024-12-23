@@ -125,8 +125,10 @@ Before getting started with the migration process, ensure the following is in pl
 3. **git**: Install [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) to clone the sample code repository.
 4. **Source Data**: Identify the existing Amazon S3 bucket and the Glue Data Catalog table that contains the tabular data to migrate.
     - If the source bucket is encrypted with [CMK-KMS](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk), remember to grant the "EMREc2role" created by the CloudFormation template, in the Stack Output, access to the CMK-KMS key prior to running the migration.
+    - This solution supports Apache Iceberg tables for metadata management.
 5. **Destination S3 Tables**: Determine the Amazon S3 table bucket and namespace/database where tabular data will migrate.
 6. **IAM Permissions**: Ensure you have the necessary IAM permissions to create and manage the required AWS resources, such as CloudFormation stacks, Amazon S3, AWS Glue, Amazon EMR, and AWS Step Functions.
+    - If an [AWS Lake Formation](https://aws.amazon.com/lake-formation/) table is referenced, specific Lake Formation permissions (such as SELECT, DESCRIBE) on Glue databases and tables are granted.
 7. **Email**: An active e-mail to subscribe to the Amazon SNS topic that will be used to receive migration status updates.
 8. **S3 bucket for CloudFormation Template (optional for CLI)**: Due to the size of the CloudFormation template, using the AWS CLI requires a bucket to host the template.
 

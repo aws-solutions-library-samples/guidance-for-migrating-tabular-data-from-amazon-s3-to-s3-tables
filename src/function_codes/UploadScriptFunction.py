@@ -117,7 +117,7 @@ def create_namespace(catalog, dst_db):
 
 
 # Function for performing INSERT/UPDATE into an existing destination Database/Table
-def insert_update_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
+def insert_update_action(src_catalog, catalog, src_db, src_tbl, dst_db, dst_tbl):
     """
     Use INSERT/UPDATE to load data from source to S3 Tables Bucket
     :param:
@@ -127,11 +127,11 @@ def insert_update_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
         # Do an INSERT INTO to migrate table data from source to S3 Tables Bucket
         sql_query_insert = ''
         # Let's start the INSERT INTO action FOR the earlier CTAS 
-        print(f"Initiating INSERT INTO worklow from {{src_db}}.{{src_tbl}} into {{dst_db}}.{{dst_tbl}} please hold...")
+        print(f"Initiating INSERT INTO worklow from {{src_catalog}}.{{src_db}}.{{src_tbl}} into {{dst_db}}.{{dst_tbl}} please hold...")
         sql_query_insert = f"""
         INSERT INTO
         `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
-        SELECT * FROM `{{src_db}}`.`{{src_tbl}}`
+        SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}`
         """                
 
         # Run the INSERT INTO SQL query
@@ -148,12 +148,12 @@ def insert_update_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
 
 
 # Function for performing CTAS - CREATE TABLE AS SELECT into a new destination Database/Table - creates a new DB/Table
-def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
+def ctas_action(src_catalog, catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
     """
     Use CTAS to load data from source to S3 Tables Bucket
     :param:
     """
-    print(f"Echo parameters catalog={{catalog}}, src_db={{src_db}}, src_tbl={{src_tbl}}, dst_db={{dst_db}}, dst_tbl={{dst_tbl}}")
+    print(f"Echo parameters src_catalog={{src_catalog}}, catalog={{catalog}}, src_db={{src_db}}, src_tbl={{src_tbl}}, dst_db={{dst_db}}, dst_tbl={{dst_tbl}}")
     # We need to create the namespace/database first, so calling the namespace function
     print(f"Creating the namespace {{dst_db}} first if it does not already exist....")
     create_namespace(catalog, dst_db)
@@ -171,7 +171,7 @@ def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
                 CREATE TABLE IF NOT EXISTS
                 `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
                 USING iceberg
-                AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
+                AS SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}` 
                 """
             else:
                 sql_query_d = f"""
@@ -179,7 +179,7 @@ def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
                 `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
                 USING iceberg
                 PARTITIONED BY {{dst_partitions}}
-                AS SELECT * FROM `{{src_db}}`.`{{src_tbl}}` 
+                AS SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}` 
                 """
 
         # Run the CTAS SQL query
@@ -233,11 +233,11 @@ def initiate_workflow():
         # Choose the CTAS option to create new Amazon S3 Table Bucket destination NameSpace and Table
         if data_migration_type == 'New-Migration':
             print(f"We are performing a new migration, so will use CTAS to create a new table and load data")
-            ctas_action(data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
+            ctas_action(data_source_catalog, data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
                         data_destination_s3tables_tbl, data_destination_s3tables_partitions
                         )
             # Now that we have successfully created the destination table, let's perform an INSERT INTO
-            insert_update_action(data_destination_catalog, data_source_db, data_source_tbl,
+            insert_update_action(data_source_catalog, data_destination_catalog, data_source_db, data_source_tbl,
                                 data_destination_s3tables_namespace, data_destination_s3tables_tbl)                                    
 
         # Now we are done with CTAS and INSERT INTO, let's perform some verifications on the destination Table
