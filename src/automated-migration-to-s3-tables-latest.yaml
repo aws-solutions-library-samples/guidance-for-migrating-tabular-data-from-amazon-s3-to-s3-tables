@@ -28,7 +28,7 @@ Metadata:
 
       -
         Label:
-          default: "Existing Data, Database and Table details"
+          default: "Source Amazon S3 General Purpose Bucket, Glue Database and Table details"
         Parameters:
           - YourS3Bucket
           - YourExistingGlueDatabase
@@ -36,7 +36,7 @@ Metadata:
 
       -
         Label:
-          default: "Destination S3 Tables Bucket ARN, Namespace, Table and Table Partitions"
+          default: "Destination Amazon S3 Table Bucket ARN, Namespace, Table and Table Partitions"
         Parameters:
           - S3TableBucket
           - S3TableBucketNamespace
@@ -74,69 +74,92 @@ Metadata:
 
     ParameterLabels:
       YourS3Bucket:
-        default: "The Source S3 Bucket Containing your data files"
+        default: "The source Amazon S3 Bucket containing your table data"
       S3TableBucket:
-        default: "Your destinations S3 Tables Bucket ARN"
+        default: "Your destination Amazon S3 Table Bucket ARN"
+      S3TableBucketTables:
+        default: "Your destination table name in S3 Table Bucket"
+      S3TableBucketNamespace:
+        default: "Your destination namespace in S3 Table Bucket"
+      S3TableBucketTablesPartitions:
+        default: "Desired partition(s) in your destination table"    
+      YourExistingGlueDatabase:
+        default: "The source Glue Data Catalog database name"
+      YourExistingGlueTable:
+        default: "The source Glue Data Catalog table name"
+      MigrationType:
+        default: "Migration type"
+      RecipientEmail:
+        default: "Email address to receive job notifications"
+      ClusterSize:
+        default: "Your desired EMR EC2 Cluster Size"
+      subnetIDs:
+        default: "VPC Subnet to deploy the EMR Cluster"
+      KeyPair:
+        default: "EC2 keypair for the EMR Cluster primary instance"
+
 
 
 Parameters:
 
   YourS3Bucket:
-    Description: Please enter the name of the bucket containing the data you want to migrate
+    Description: Please enter the name of the bucket containing the table data you want to migrate
     Type: String
     AllowedPattern: '^[a-z0-9.-]{3,63}$'
     ConstraintDescription: Bucket name must contain only lowercase letters, numbers, periods (.), and dashes (-). Visit Amazon S3 User Guide 'https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html' 
 
   
   S3TableBucket:
-    Description: Please enter the ARN of your S3 Tables Bucket
+    Description: Please enter the ARN of your S3 table bucket
     Type: String
     MinLength: '3'
-    ConstraintDescription: Please provide your desired valid S3Tables Bucket ARN
+    ConstraintDescription: Please provide your desired valid S3 table bucket ARN
     AllowedPattern: '(arn:aws[-a-z0-9]*:[a-z0-9]+:[-a-z0-9]*:[0-9]{12}:bucket/[a-z0-9_-]{3,63})'
 
 
   S3TableBucketNamespace:
-    Description: Please specify the S3Tables Namespace or Database where your data will be stored in your Amazon S3 Tables Bucket
+    Description: Please specify the S3 table Namespace where your data will be stored in your table bucket
     Type: String
-    MinLength: '0'
+    MinLength: '1'
     MaxLength: '1024'    
-    ConstraintDescription: Please provide your desired S3Tables Bucket namespace
+    ConstraintDescription: Please provide your desired namespace
     AllowedPattern: '[0-9a-z_]*'
 
    
 
   S3TableBucketTables:
-    Description: Please enter your desired S3 Tables Table Name
+    Description: Please enter your desired destination table name
     Type: String
-    MinLength: '3'
+    MinLength: '1'
     MaxLength: '63'  
-    ConstraintDescription: Please provide your Existing S3Tables Bucket ARN
+    ConstraintDescription: Please provide your desired destination table name
     AllowedPattern: '[0-9a-z_]*'
 
 
   S3TableBucketTablesPartitions:
-    Description: Please enter your desired S3 Tables Table Partitions. This is needed since CTAS does not preserve source Partition information
+    Description: Please enter your desired table partitions. Valid partition keys are (col1) for single column partition or (col1, col2) for multiple column partitions. Do not include partition column types!
     Type: String
     Default: NotApplicable
-    ConstraintDescription: Please provide your desired destination S3Table Table Partition information or type NotApplicable to ignore
+    ConstraintDescription: Please provide your desired destination partition information in the format (col1) or (col1, col2 ...) or type NotApplicable
+    MinLength: '3'
+    AllowedPattern: ^(NotApplicable|\([^)]*\))
 
 
   YourExistingGlueDatabase:
-    Description: Please enter the ARN of your S3 Tables Bucket
+    Description: Please specify your source Glue database name
     Type: String
     MinLength: '1'
     MaxLength: '255'    
-    ConstraintDescription: Please provide your Existing Glue Database name or Namespace
+    ConstraintDescription: Please provide your existing Glue Database name or Namespace
     AllowedPattern: '[\u0020-\uD7FF\uE000-\uFFFD\uD800\uDC00-\uDBFF\uDFFF\t]*'
 
 
   YourExistingGlueTable:
-    Description: Please enter the ARN of your S3 Tables Bucket
+    Description: Please specify your existing Glue table name
     Type: String
     MinLength: '1'
     MaxLength: '255'     
-    ConstraintDescription: Please provide your Existing Glue Table Name
+    ConstraintDescription: Please provide your existing Glue table name
     AllowedPattern: '[\u0020-\uD7FF\uE000-\uFFFD\uD800\uDC00-\uDBFF\uDFFF\t]*'
 
 
@@ -155,27 +178,28 @@ Parameters:
   MigrationType:
     AllowedValues:
       - New-Migration
-    Description: New-Migration use CTAS [Create Table As Select] to migrate to a new Amazon S3Table Buckets namespace and table
+    Description: New-Migration use CTAS [Create Table As Select] to migrate table from S3 general purpose bucket to a new Amazon S3 table bucket
     Type: String
     Default: New-Migration   
 
 
   RecipientEmail:
-    Description: Please enter the Email address to receive Job notifications. Please remember to Confirm the Subscription
+    Description: Please enter the email address to receive Job notifications. Please remember to Confirm the SNS subscription
     Type: String
     MinLength: '5'
     MaxLength: '150'
     ConstraintDescription: Please enter a valid email address
+    AllowedPattern: '^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$'
 
   subnetIDs:
-    Description: Please choose exactly two Subnets, EMR will evaluate and deploy into only one of the subnets. Please review EMR Documentation for guidance.
+    Description: Please choose exactly two Subnets, EMR will evaluate and deploy into only one of the subnets. Please review [https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-clusters-in-a-vpc.html].
     Type: List<AWS::EC2::Subnet::Id>    
     MinLength: '1'
     ConstraintDescription: Please specify exactly two SubnetIDs
 
   KeyPair:
     Type: 'AWS::EC2::KeyPair::KeyName'
-    Description: Please choose a KeyPair to enable SSH Access into EMR Primary Node.
+    Description: Please choose a KeyPair to enable SSH Access into the EMR Cluster Nodes.
     MinLength: '1'
     ConstraintDescription: Please specify an EC2 Keypair name
 
@@ -187,10 +211,12 @@ Mappings:
       csvwithversionid: restore-and-copy/csv-manifest/with-version-id/
     Parameter:
       catalogname: s3tablescatalog
+      sparkcatalog: spark_catalog
 
   EMR:
     Cluster:
       releaselabel: emr-7.5.0
+
     Small:
       PrimaryInstanceCount: 1
       PrimaryInstanceType: m5.4xlarge
@@ -205,11 +231,14 @@ Mappings:
       executorCores: 4
       driverMemory: 24G
       driverCores: 4
-      dynamicAllocMinExec: 2
       dynamicAllocMaxExec: 7
       executorMemoryOverhead: 8G
       driverMemoryOverhead: 2G
       driverMaxResultsSize: 4G
+      DiskSize: 64
+      PryNodeDiskCount: 2
+      CoreNodeDiskCount: 4
+      TaskNodeDiskCount: 3      
 
 
     Medium:
@@ -226,11 +255,14 @@ Mappings:
       executorCores: 4
       driverMemory: 24G
       driverCores: 4
-      dynamicAllocMinExec: 8
       dynamicAllocMaxExec: 29
       executorMemoryOverhead: 8G
       driverMemoryOverhead: 2G
       driverMaxResultsSize: 4G
+      DiskSize: 64
+      PryNodeDiskCount: 2
+      CoreNodeDiskCount: 4
+      TaskNodeDiskCount: 3      
 
   
     Large:
@@ -247,32 +279,38 @@ Mappings:
       executorCores: 3
       driverMemory: 32G
       driverCores: 4
-      dynamicAllocMinExec: 12
       dynamicAllocMaxExec: 44
       executorMemoryOverhead: 8G
       driverMemoryOverhead: 6G
       driverMaxResultsSize: 12G
+      DiskSize: 128
+      PryNodeDiskCount: 2
+      CoreNodeDiskCount: 4
+      TaskNodeDiskCount: 3      
 
  
     Xlarge:
       PrimaryInstanceCount: 1
       PrimaryInstanceType: r5.4xlarge
       PrimaryInstanceType2: i3.4xlarge
-      CoreInstanceCount: 8
+      CoreInstanceCount: 4
       CoreInstanceType: i3.4xlarge
       CoreInstanceType2: r5d.4xlarge
-      TaskInstanceCount: 12
+      TaskInstanceCount: 16
       TaskInstanceType: i3.4xlarge 
       TaskInstanceType2: r5d.4xlarge
       executorMemory: 28G
       executorCores: 4
       driverMemory: 48G
       driverCores: 4
-      dynamicAllocMinExec: 20
       dynamicAllocMaxExec: 74  
       executorMemoryOverhead: 8G
       driverMemoryOverhead: 6G   
       driverMaxResultsSize: 16G
+      DiskSize: 256
+      PryNodeDiskCount: 2
+      CoreNodeDiskCount: 4
+      TaskNodeDiskCount: 3      
 
 
   Performance:
@@ -309,6 +347,10 @@ Resources:
 ################################ CheckResourceExists ######################################################
 
   CheckResourceExists:
+    DependsOn:
+      - CheckTableLFAccess
+      - CheckDBLFAccess
+      - CheckDefaultDBLFAccess    
     Type: 'Custom::LambdaTrigger'
     Properties:
       ServiceToken: !GetAtt CheckResourceExistsLambdaFunction.Arn
@@ -316,6 +358,56 @@ Resources:
       sourcetableexists: !Ref YourExistingGlueTable
       sourcedbexists: !Ref YourExistingGlueDatabase
 
+
+
+  CheckTableLFAccess: 
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt CheckResourceExistsIAMRole.Arn
+      Resource:
+        Table:
+          CatalogId: !Sub ${AWS::AccountId}
+          DatabaseName: !Ref YourExistingGlueDatabase
+          Name: !Ref YourExistingGlueTable
+      Permissions:
+        - "SELECT"
+        - "DESCRIBE"
+      PermissionsWithGrantOption:
+        - "SELECT"
+        - "DESCRIBE"
+     
+
+  CheckDBLFAccess: 
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt CheckResourceExistsIAMRole.Arn
+      Resource:
+        Database:
+          CatalogId: !Sub ${AWS::AccountId}
+          Name: !Ref YourExistingGlueDatabase
+      Permissions:
+        - "DESCRIBE"
+      PermissionsWithGrantOption:
+        - "DESCRIBE"    
+
+
+  CheckDefaultDBLFAccess:   
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt CheckResourceExistsIAMRole.Arn
+      Resource:
+        Database:
+          CatalogId: !Sub ${AWS::AccountId}
+          Name: default
+      Permissions:
+        - "DESCRIBE"
+      PermissionsWithGrantOption:
+        - "DESCRIBE"                      
+                   
+   
 
   CheckResourceExistsIAMRole:
     Type: 'AWS::IAM::Role'
@@ -642,8 +734,9 @@ Resources:
             parser.add_argument('--data_source_bucket', help="Source data S3 bucket name.")
             parser.add_argument('--data_source_db', help="Source data Glue Database name.")
             parser.add_argument('--data_source_tbl', help="Source data Glue Table name.")
+            parser.add_argument('--data_source_catalog', help="Source DB/TableCatalog.")
             parser.add_argument('--data_destination_s3tables_arn', help="Destination S3 Table ARN.")
-            parser.add_argument('--data_destination_catalog', help="Destination S3 Tables Namespace/Database.")
+            parser.add_argument('--data_destination_catalog', help="Destination S3 Tables Catalog.")
             parser.add_argument('--data_destination_s3tables_namespace', help="Destination S3 Tables Namespace/Database.")
             parser.add_argument('--data_destination_s3tables_tbl', help="Destination S3 Tables Table name .")
             parser.add_argument('--data_destination_s3tables_partitions', help="Destination S3 Tables Table Partitions .")
@@ -657,6 +750,7 @@ Resources:
             data_source_bucket = args.data_source_bucket
             data_source_db = args.data_source_db
             data_source_tbl = args.data_source_tbl
+            data_source_catalog = args.data_source_catalog
             data_destination_catalog = args.data_destination_catalog
             data_destination_s3tables_arn = args.data_destination_s3tables_arn
             data_destination_s3tables_namespace = args.data_destination_s3tables_namespace
@@ -671,7 +765,10 @@ Resources:
                 .set(f"spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
                 .set(f"spark.sql.catalog.{{data_destination_catalog}}.catalog-impl", "software.amazon.s3tables.iceberg.S3TablesCatalog") \
                 .set(f"spark.sql.catalog.{{data_destination_catalog}}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO") \
-                .set(f"spark.sql.catalog.{{data_destination_catalog}}.warehouse", data_destination_s3tables_arn) 
+                .set(f"spark.sql.catalog.{{data_destination_catalog}}.warehouse", data_destination_s3tables_arn) \
+                .set(f"spark.sql.catalog.{{data_source_catalog}}", "org.apache.iceberg.spark.SparkCatalog") \
+                .set(f"spark.sql.catalog.{{data_source_catalog}}.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog") \
+                .set(f"spark.sql.catalog.{{data_source_catalog}}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")                 
 
 
 
@@ -694,6 +791,36 @@ Resources:
                     raise e                       
 
 
+            # Function for performing INSERT/UPDATE into an existing destination Database/Table
+            def insert_update_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
+                """
+                Use INSERT/UPDATE to load data from source to S3 Tables Bucket
+                :param:
+                """
+
+                try:
+                    # Do an INSERT INTO to migrate table data from source to S3 Tables Bucket
+                    sql_query_insert = ''
+                    # Let's start the INSERT INTO action FOR the earlier CTAS 
+                    print(f"Initiating INSERT INTO worklow from {{src_db}}.{{src_tbl}} into {{dst_db}}.{{dst_tbl}} please hold...")
+                    sql_query_insert = f"""
+                    INSERT INTO
+                    `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
+                    SELECT * FROM `{{src_db}}`.`{{src_tbl}}`
+                    """                
+
+                    # Run the INSERT INTO SQL query
+                    spark_sql_query_insert = spark.sql(sql_query_insert)
+                except Exception as e:
+                    print(e)
+                    raise e
+                else:
+                    print(f"INSERT INTO worklow from {{src_db}}.{{src_tbl}} into {{dst_db}}.{{dst_tbl}} completed!")
+
+
+
+
+
 
             # Function for performing CTAS - CREATE TABLE AS SELECT into a new destination Database/Table - creates a new DB/Table
             def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
@@ -710,6 +837,7 @@ Resources:
                 try:
                     # Do a CTAS to migrate table data from source Table to S3 Tables Bucket
                     # If destination partition is provided, them include partition info in CTAS query
+                    # We are not loading data now, just creating an empty table
                     sql_query_d = ''
                     # Check the provided partition name and value for the destination Table
                     if dst_partitions:
@@ -783,8 +911,11 @@ Resources:
                         ctas_action(data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
                                     data_destination_s3tables_tbl, data_destination_s3tables_partitions
                                     )
+                        # Now that we have successfully created the destination table, let's perform an INSERT INTO
+                        insert_update_action(data_destination_catalog, data_source_db, data_source_tbl,
+                                            data_destination_s3tables_namespace, data_destination_s3tables_tbl)                                    
 
-                    # Now we are done with CTAS, let's perform some verifications on the destination Table
+                    # Now we are done with CTAS and INSERT INTO, let's perform some verifications on the destination Table
                     # Let's query the destination table
                     print(f"Let do a test query of the destination table {{data_destination_s3tables_namespace}}.{{data_destination_s3tables_tbl}} to see if we can perform a successful query")
                     query_table_data(data_destination_catalog, data_destination_s3tables_namespace, data_destination_s3tables_tbl)
@@ -972,7 +1103,6 @@ Resources:
                           "spark.executor.cores": "${executorCores}",
                           "spark.driver.memory": "${driverMemory}",
                           "spark.driver.cores": "${driverCores}",
-                          "spark.dynamicAllocation.minExecutors": "${dynamicAllocMinExec}",
                           "spark.dynamicAllocation.maxExecutors": "${dynamicAllocMaxExec}",
                           "spark.driver.memoryOverhead": "${driverMemoryOverhead}",
                           "spark.executor.memoryOverhead": "${executorMemoryOverhead}",
@@ -999,9 +1129,9 @@ Resources:
                                   {
                                       "VolumeSpecification": {
                                           "VolumeType": "gp3",
-                                          "SizeInGB": 32
+                                          "SizeInGB": ${InstanceDiskSize}
                                       },
-                                      "VolumesPerInstance":2
+                                      "VolumesPerInstance": ${PryVolCount}
                                   }
                                 ]
                               }                               
@@ -1014,9 +1144,9 @@ Resources:
                                   {
                                       "VolumeSpecification": {
                                           "VolumeType": "gp3",
-                                          "SizeInGB": 32
+                                          "SizeInGB": ${InstanceDiskSize}
                                       },
-                                      "VolumesPerInstance":2
+                                      "VolumesPerInstance": ${PryVolCount}
                                   }
                                 ]
                               }                               
@@ -1036,9 +1166,9 @@ Resources:
                                   {
                                       "VolumeSpecification": {
                                           "VolumeType": "gp3",
-                                          "SizeInGB": 32
+                                          "SizeInGB": ${InstanceDiskSize}
                                       },
-                                      "VolumesPerInstance":4
+                                      "VolumesPerInstance": ${CoreVolCount}
                                   }
                                 ]
                               }                               
@@ -1051,9 +1181,9 @@ Resources:
                                   {
                                       "VolumeSpecification": {
                                           "VolumeType": "gp3",
-                                          "SizeInGB": 32
+                                          "SizeInGB": ${InstanceDiskSize}
                                       },
-                                      "VolumesPerInstance":4
+                                      "VolumesPerInstance": ${CoreVolCount}
                                   }
                                 ]
                               }                               
@@ -1073,9 +1203,9 @@ Resources:
                                   {
                                       "VolumeSpecification": {
                                           "VolumeType": "gp3",
-                                          "SizeInGB": 32
+                                          "SizeInGB": ${InstanceDiskSize}
                                       },
-                                      "VolumesPerInstance":3
+                                      "VolumesPerInstance": ${TaskVolCount}
                                   }
                                 ]
                               }                               
@@ -1088,9 +1218,9 @@ Resources:
                                   {
                                       "VolumeSpecification": {
                                           "VolumeType": "gp3",
-                                          "SizeInGB": 32
+                                          "SizeInGB": ${InstanceDiskSize}
                                       },
-                                      "VolumesPerInstance":3
+                                      "VolumesPerInstance": ${TaskVolCount}
                                   }
                                 ]
                               }                               
@@ -1187,6 +1317,8 @@ Resources:
                           "${DataSourceGlueDatabase}",
                           "--data_source_tbl",
                           "${DataSourceGlueTable}",
+                          "--data_source_catalog",
+                          "${DataSourceCatalog}",                          
                           "--data_destination_catalog",
                           "${DataDestinationCatalog}",
                           "--data_destination_s3tables_arn",
@@ -1298,6 +1430,7 @@ Resources:
             DataSourceS3Bucket: !Ref YourS3Bucket
             DataSourceGlueTable: !Ref YourExistingGlueTable
             DataSourceGlueDatabase: !Ref YourExistingGlueDatabase
+            DataSourceCatalog: !FindInMap [ PySpark, Parameter, sparkcatalog ] 
             DataDestinationCatalog: !FindInMap [ PySpark, Parameter, catalogname ]
             DataDestinationS3TablesArn: !Ref S3TableBucket
             DataDestinationS3TablesNamespace: !Ref S3TableBucketNamespace
@@ -1318,16 +1451,79 @@ Resources:
             executorMemory: !FindInMap [EMR, !Ref ClusterSize, executorMemory]  
             executorCores: !FindInMap [EMR, !Ref ClusterSize, executorCores] 
             driverMemory: !FindInMap [EMR, !Ref ClusterSize, driverMemory] 
-            driverCores: !FindInMap [EMR, !Ref ClusterSize, driverCores] 
-            dynamicAllocMinExec: !FindInMap [EMR, !Ref ClusterSize, dynamicAllocMinExec] 
+            driverCores: !FindInMap [EMR, !Ref ClusterSize, driverCores]
             dynamicAllocMaxExec: !FindInMap [EMR, !Ref ClusterSize, dynamicAllocMaxExec]   
             driverMemoryOverhead: !FindInMap [EMR, !Ref ClusterSize, driverMemoryOverhead]  
             executorMemoryOverhead: !FindInMap [EMR, !Ref ClusterSize, executorMemoryOverhead]      
             driverMaxResultsSize: !FindInMap [EMR, !Ref ClusterSize, driverMaxResultsSize]     
             InstanceKeyPair: !Ref KeyPair
             SubnetIDOne: !Select [0, !Ref subnetIDs]
-            SubnetIDTwo: !Select [1, !Ref subnetIDs]                            
+            SubnetIDTwo: !Select [1, !Ref subnetIDs]
+            InstanceDiskSize: !FindInMap [ EMR, !Ref ClusterSize, DiskSize ]    
+            PryVolCount:  !FindInMap [ EMR, !Ref ClusterSize, PryNodeDiskCount ] 
+            CoreVolCount:  !FindInMap [ EMR, !Ref ClusterSize, CoreNodeDiskCount ] 
+            TaskVolCount:  !FindInMap [ EMR, !Ref ClusterSize, TaskNodeDiskCount ] 
+                    
 
+############################################## StateMachine Ends ##########################################
+
+################################################ Grant Lakeformation Permissions ################################
+
+
+  GrantTableLFAccess:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt EMREc2Role.Arn
+      Resource:
+        Table:
+          CatalogId: !Sub ${AWS::AccountId}
+          DatabaseName: !Ref YourExistingGlueDatabase
+          Name: !Ref YourExistingGlueTable
+      Permissions:
+        - "SELECT"
+        - "DESCRIBE"
+      PermissionsWithGrantOption:
+        - "SELECT"
+        - "DESCRIBE"
+     
+
+  GrantDBLFAccess:
+    DependsOn:
+      - CheckResourceExists   
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt EMREc2Role.Arn
+      Resource:
+        Database:
+          CatalogId: !Sub ${AWS::AccountId}
+          Name: !Ref YourExistingGlueDatabase
+      Permissions:
+        - "DESCRIBE"
+      PermissionsWithGrantOption:
+        - "DESCRIBE"    
+
+
+  GrantDefaultDBLFAccess:
+    DependsOn:
+      - CheckResourceExists     
+    Type: AWS::LakeFormation::PrincipalPermissions
+    Properties:
+      Principal:
+        DataLakePrincipalIdentifier: !GetAtt EMREc2Role.Arn
+      Resource:
+        Database:
+          CatalogId: !Sub ${AWS::AccountId}
+          Name: default
+      Permissions:
+        - "DESCRIBE"
+      PermissionsWithGrantOption:
+        - "DESCRIBE"                      
+                   
+################################################################# End LF permissions #####################################################                   
 
 
 

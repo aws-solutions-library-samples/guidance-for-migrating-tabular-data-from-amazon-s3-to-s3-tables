@@ -15,8 +15,9 @@ parser.add_argument('--data_migration_type', help="Data Migration type new or in
 parser.add_argument('--data_source_bucket', help="Source data S3 bucket name.")
 parser.add_argument('--data_source_db', help="Source data Glue Database name.")
 parser.add_argument('--data_source_tbl', help="Source data Glue Table name.")
+parser.add_argument('--data_source_catalog', help="Source DB/TableCatalog.")
 parser.add_argument('--data_destination_s3tables_arn', help="Destination S3 Table ARN.")
-parser.add_argument('--data_destination_catalog', help="Destination S3 Tables Namespace/Database.")
+parser.add_argument('--data_destination_catalog', help="Destination S3 Tables Catalog.")
 parser.add_argument('--data_destination_s3tables_namespace', help="Destination S3 Tables Namespace/Database.")
 parser.add_argument('--data_destination_s3tables_tbl', help="Destination S3 Tables Table name .")
 parser.add_argument('--data_destination_s3tables_partitions', help="Destination S3 Tables Table Partitions .")
@@ -30,6 +31,7 @@ data_migration_type = args.data_migration_type
 data_source_bucket = args.data_source_bucket
 data_source_db = args.data_source_db
 data_source_tbl = args.data_source_tbl
+data_source_catalog = args.data_source_catalog
 data_destination_catalog = args.data_destination_catalog
 data_destination_s3tables_arn = args.data_destination_s3tables_arn
 data_destination_s3tables_namespace = args.data_destination_s3tables_namespace
@@ -37,7 +39,7 @@ data_destination_s3tables_tbl = args.data_destination_s3tables_tbl
 data_destination_s3tables_partitions = args.data_destination_s3tables_partitions
 
 # Create Spark Configuration Set
-conf = SparkConf()     .set("spark.sql.catalogImplementation", "hive")     .set("mapreduce.input.fileinputformat.input.dir.recursive", "true")     .set(f"spark.sql.catalog.{data_destination_catalog}", "org.apache.iceberg.spark.SparkCatalog")     .set(f"spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")     .set(f"spark.sql.catalog.{data_destination_catalog}.catalog-impl", "software.amazon.s3tables.iceberg.S3TablesCatalog")     .set(f"spark.sql.catalog.{data_destination_catalog}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")     .set(f"spark.sql.catalog.{data_destination_catalog}.warehouse", data_destination_s3tables_arn) 
+conf = SparkConf()     .set("spark.sql.catalogImplementation", "hive")     .set("mapreduce.input.fileinputformat.input.dir.recursive", "true")     .set(f"spark.sql.catalog.{data_destination_catalog}", "org.apache.iceberg.spark.SparkCatalog")     .set(f"spark.sql.extensions", "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")     .set(f"spark.sql.catalog.{data_destination_catalog}.catalog-impl", "software.amazon.s3tables.iceberg.S3TablesCatalog")     .set(f"spark.sql.catalog.{data_destination_catalog}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")     .set(f"spark.sql.catalog.{data_destination_catalog}.warehouse", data_destination_s3tables_arn)     .set(f"spark.sql.catalog.{data_source_catalog}", "org.apache.iceberg.spark.SparkCatalog")     .set(f"spark.sql.catalog.{data_source_catalog}.catalog-impl", "org.apache.iceberg.aws.glue.GlueCatalog")     .set(f"spark.sql.catalog.{data_source_catalog}.io-impl", "org.apache.iceberg.aws.s3.S3FileIO")                 
 
 
 
@@ -60,6 +62,36 @@ def create_namespace(catalog, dst_db):
         raise e                       
 
 
+# Function for performing INSERT/UPDATE into an existing destination Database/Table
+def insert_update_action(catalog, src_db, src_tbl, dst_db, dst_tbl):
+    """
+    Use INSERT/UPDATE to load data from source to S3 Tables Bucket
+    :param:
+    """
+
+    try:
+        # Do an INSERT INTO to migrate table data from source to S3 Tables Bucket
+        sql_query_insert = ''
+        # Let's start the INSERT INTO action FOR the earlier CTAS 
+        print(f"Initiating INSERT INTO worklow from {src_db}.{src_tbl} into {dst_db}.{dst_tbl} please hold...")
+        sql_query_insert = f"""
+        INSERT INTO
+        `{catalog}`.`{dst_db}`.`{dst_tbl}`
+        SELECT * FROM `{src_db}`.`{src_tbl}`
+        """                
+
+        # Run the INSERT INTO SQL query
+        spark_sql_query_insert = spark.sql(sql_query_insert)
+    except Exception as e:
+        print(e)
+        raise e
+    else:
+        print(f"INSERT INTO worklow from {src_db}.{src_tbl} into {dst_db}.{dst_tbl} completed!")
+
+
+
+
+
 
 # Function for performing CTAS - CREATE TABLE AS SELECT into a new destination Database/Table - creates a new DB/Table
 def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
@@ -76,6 +108,7 @@ def ctas_action(catalog, src_db, src_tbl, dst_db, dst_tbl, dst_partitions):
     try:
         # Do a CTAS to migrate table data from source Table to S3 Tables Bucket
         # If destination partition is provided, them include partition info in CTAS query
+        # We are not loading data now, just creating an empty table
         sql_query_d = ''
         # Check the provided partition name and value for the destination Table
         if dst_partitions:
@@ -141,7 +174,7 @@ def initiate_workflow():
     try:
         # First let's query the source table
         print(f"Let do a test query of the source table {data_source_db}.{data_source_tbl} to see if we can perform a successful query")
-        query_table_data(None, data_source_db, data_source_tbl)
+        query_table_data(data_source_catalog, data_source_db, data_source_tbl)
         print(f"Test query of the source table {data_source_db}.{data_source_tbl} is successful proceeding to main task")
         # Choose the CTAS option to create new Amazon S3 Table Bucket destination NameSpace and Table
         if data_migration_type == 'New-Migration':
@@ -149,8 +182,11 @@ def initiate_workflow():
             ctas_action(data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
                         data_destination_s3tables_tbl, data_destination_s3tables_partitions
                         )
+            # Now that we have successfully created the destination table, let's perform an INSERT INTO
+            insert_update_action(data_destination_catalog, data_source_db, data_source_tbl,
+                                data_destination_s3tables_namespace, data_destination_s3tables_tbl)                                    
 
-        # Now we are done with CTAS, let's perform some verifications on the destination Table
+        # Now we are done with CTAS and INSERT INTO, let's perform some verifications on the destination Table
         # Let's query the destination table
         print(f"Let do a test query of the destination table {data_destination_s3tables_namespace}.{data_destination_s3tables_tbl} to see if we can perform a successful query")
         query_table_data(data_destination_catalog, data_destination_s3tables_namespace, data_destination_s3tables_tbl)
