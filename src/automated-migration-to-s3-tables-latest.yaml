@@ -211,7 +211,7 @@ Mappings:
       csvwithversionid: restore-and-copy/csv-manifest/with-version-id/
     Parameter:
       catalogname: s3tablescatalog
-      sparkcatalog: gdc_catalog
+      sparkcatalog: spark_catalog
 
   EMR:
     Cluster:
@@ -847,6 +847,7 @@ Resources:
                             `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
                             USING iceberg
                             AS SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}` 
+                            LIMIT 0
                             """
                         else:
                             sql_query_d = f"""
@@ -854,7 +855,8 @@ Resources:
                             `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
                             USING iceberg
                             PARTITIONED BY {{dst_partitions}}
-                            AS SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}` 
+                            AS SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}`
+                            LIMIT 0
                             """
 
                     # Run the CTAS SQL query

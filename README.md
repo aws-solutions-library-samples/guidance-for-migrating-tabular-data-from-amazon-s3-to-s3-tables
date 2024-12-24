@@ -151,30 +151,25 @@ Current list of available Regions with S3 Tables support can be found [here](htt
 
 Provided below is the list of EMR Clusters that are deployable from the CloudFormation template. This decision is based off of the organization requirements.
 
-| Size   | Primary Instance | Core Instances | Task Instances |
-|--------|------------------|----------------|----------------|
-| Small  | 1 x m5.4xlarge   | 1 x i3.4xlarge | 1 x i3.4xlarge |
-| Medium | 1 x m5.4xlarge   | 4 x i3.4xlarge | 4 x i3.4xlarge |
-| Large  | 1 x r5.4xlarge   | 4 x i3.4xlarge | 8 x i3.4xlarge |
-| Xlarge | 1 x r5.4xlarge   | 8 x i3.4xlarge | 12 x i3.4xlarge |
-
 Available Instance Classes for EMR based upon Size:
 
-1. Small:
-   - Primary: m5.4xlarge or m5d.4xlarge
-   - Core and Task: i3.4xlarge or r5d.4xlarge
-
-2. Medium:
-   - Primary: m5.4xlarge or m5d.4xlarge
-   - Core and Task: i3.4xlarge or r5d.4xlarge
-
-3. Large:
-   - Primary: r5.4xlarge or i3.4xlarge
-   - Core and Task: i3.4xlarge or r5d.4xlarge
-
-4. Xlarge:
-   - Primary: r5.4xlarge or i3.4xlarge
-   - Core and Task: i3.4xlarge or r5d.4xlarge
+| Size   | Primary Instance | Core Instances | Task Instances |
+|--------|------------------|----------------|----------------|
+| Small  | 1 x m5.4xlarge   | 1 x i3.4xlarge | 1 x i3.4xlarge | 
+|        |       or         |       or       |        or       |
+|        | 1 x m5d.4xlarge  | 1 x m5d.4xlarge | 1 x r5d.4xlarge | 
+|        |                  |                 |                 |
+| Medium | 1 x m5.4xlarge   | 4 x i3.4xlarge | 4 x i3.4xlarge |
+|        |      or            |       or         |        or        |
+| | 1 x m5d.4xlarge  | 4 x r5d.4xlarge | 4 x r5d.xlarge |
+|        |                  |                 |                 |
+| Large | 1 x r5.4xlarge   | 4 x i3.4xlarge | 8 x i3.4xlarge |
+|        |      or            |       or         |        or        |
+| | 1 x i3.4xlarge   | 4 x r5d.4xlarge | 8 x r5d.4xlarge |
+|        |                  |                 |                 |
+| Xlarge | 1 x r5.4xlarge   | 4 x i3.4xlarge | 16 x i3.4xlarge |
+|        |                  |       or         |        or        |
+| | 1 x i3.4xlarge   | 4 x r5d.4xlarge | 16 x r5d.4xlarge |
 
 ### Cluster Performance Configuration
 

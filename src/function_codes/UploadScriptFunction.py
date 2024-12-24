@@ -172,6 +172,7 @@ def ctas_action(src_catalog, catalog, src_db, src_tbl, dst_db, dst_tbl, dst_part
                 `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
                 USING iceberg
                 AS SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}` 
+                LIMIT 0
                 """
             else:
                 sql_query_d = f"""
@@ -179,7 +180,8 @@ def ctas_action(src_catalog, catalog, src_db, src_tbl, dst_db, dst_tbl, dst_part
                 `{{catalog}}`.`{{dst_db}}`.`{{dst_tbl}}`
                 USING iceberg
                 PARTITIONED BY {{dst_partitions}}
-                AS SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}` 
+                AS SELECT * FROM `{{src_catalog}}`.`{{src_db}}`.`{{src_tbl}}`
+                LIMIT 0
                 """
 
         # Run the CTAS SQL query
