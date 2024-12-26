@@ -167,9 +167,9 @@ Available Instance Classes for EMR based upon Size:
 |        |      or            |       or         |        or        |
 | | 1 x i3.4xlarge   | 4 x r5d.4xlarge | 8 x r5d.4xlarge |
 |        |                  |                 |                 |
-| Xlarge | 1 x r5.4xlarge   | 4 x i3.4xlarge | 16 x i3.4xlarge |
+| Xlarge | 1 x r5.4xlarge   | 8 x i3.4xlarge | 12 x i3.4xlarge |
 |        |                  |       or         |        or        |
-| | 1 x i3.4xlarge   | 4 x r5d.4xlarge | 16 x r5d.4xlarge |
+| | 1 x i3.4xlarge   | 8 x r5d.4xlarge | 12 x r5d.4xlarge |
 
 ### Cluster Performance Configuration
 
