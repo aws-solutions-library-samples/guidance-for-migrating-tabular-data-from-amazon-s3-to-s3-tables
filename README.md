@@ -24,7 +24,7 @@
 
 This user guide is created for anyone who is interested in migrating tabular data from [Amazon S3](https://aws.amazon.com/s3/) general purpose buckets to [Amazon S3 Tables](https://aws.amazon.com/s3/features/tables/). Amazon S3 Tables are purpose-built for storing tables using the [Apache Iceberg](https://iceberg.apache.org/) format. S3 Tables introduce a new bucket type for Apache Iceberg tables that delivers up to 3x faster query performance and up to 10x higher transactions per second compared to storing Iceberg tables in general purpose Amazon S3 buckets. Table buckets allow you to create tables and configure table-level permissions through the [AWS Management Console](https://aws.amazon.com/console/).  With built-in support for Apache Iceberg, query tabular data in S3 with popular engines including [Amazon Athena](https://aws.amazon.com/athena/), [Amazon Redshift](https://aws.amazon.com/pm/redshift/), and [Apache Spark](https://spark.apache.org/). 
 
-This solution sets up an automated migration process for moving tables registered in [AWS Glue Table Catalog](https://docs.aws.amazon.com/glue/latest/dg/tables-described.html) and stored in Amazon S3 general-purpose buckets to Amazon S3 Table buckets using [AWS Step Functions](https://aws.amazon.com/step-functions/), and [Amazon EMR](https://aws.amazon.com/emr/) with Apache Spark.
+This solution sets up an automated migration process for moving tables (Apache Iceberg and Hive tables) registered in [AWS Glue Table Catalog](https://docs.aws.amazon.com/glue/latest/dg/tables-described.html) and stored in Amazon S3 general-purpose buckets to Amazon S3 Table buckets using [AWS Step Functions](https://aws.amazon.com/step-functions/), and [Amazon EMR](https://aws.amazon.com/emr/) with Apache Spark.
 
 <a name="core-services"></a>
 ### Core Services
@@ -45,7 +45,7 @@ Below is a high-level overview of the core services that are incorporated into t
 <a name="solution-overview"></a>
 ### Solution Overview
 
-This solution deploys an AWS Step Functions state machine to manage the migration workflow along with several other supporting AWS resources (AWS IAM roles, Amazon SNS topic, and an Amazon S3 bucket for EMR logs). In addition to the standard AWS resources, a [CloudFormation Custom Resource](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-custom-resources.html), via AWS Lambda, is used to validate the existence of the source S3 bucket and AWS Glue Table. Once deployed, the user starts the EMREC2StateMachine workflow which in turn deploys an EMR cluster, starts an Apache Spark job execution on the deployed cluster, and deletes the cluster when the migration is completed. The Apache Spark job uses CTAS (Create Table as Select) to migrate the Iceberg data from the source S3 bucket to the target S3 table bucket. Throughout the migration process, the Step Function sends status notifications via SNS to the user.
+This solution deploys an AWS Step Functions state machine to manage the migration workflow along with several other supporting AWS resources (AWS IAM roles, Amazon SNS topic, and an Amazon S3 bucket for EMR logs). In addition to the standard AWS resources, a [CloudFormation Custom Resource](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/template-custom-resources.html), via AWS Lambda, is used to validate the existence of the source S3 bucket and AWS Glue Table. Once deployed, the user starts the EMREC2StateMachine workflow which in turn deploys an EMR cluster, starts an Apache Spark job execution on the deployed cluster, and deletes the cluster when the migration is completed. The Apache Spark job uses CTAS (Create Table as Select) to migrate the tabular data from the source S3 bucket to the target S3 table bucket. Throughout the migration process, the Step Function sends status notifications via SNS to the user.
 
 Upon completion, the Step Function sends an email via SNS to the user that the workflow has completed, and the EMR Cluster is then terminated by the EMREC2StateMachine Step Function task.
 
@@ -68,7 +68,7 @@ Upon completion, the Step Function sends an email via SNS to the user that the w
 
 While this sample code is free to download and review, please be aware that you will incur costs for the AWS services or resources activated by this guidance architecture when the CloudFormation template is launched. The cost will vary based upon the amount of data that requires migration, number of objects, and the size of the EMR cluster creation.
 
-In this cost example, we examine the cost over a month for a 1TiB S3 bucket migration with updates creating 1,000 new data files with an average object size of 5 MB and 3 metadata files with an average object size of 10 KB. The table users frequently perform queries on the data-set and generate 500,000 GET requests per month. To optimize query performance, automatic compaction is enabled. In addition we are including the cost of a Small EMR Cluster option, detailed below in deployment costs, for the duration of the migration.
+In this cost example, we examine the cost over a month for 1TiB of data migrated with updates creating 1,000 new data files with an average object size of 5 MB and 3 metadata files with an average object size of 10 KB. The table users frequently perform queries on the data-set and generate 500,000 GET requests per month. To optimize query performance, automatic compaction is enabled. In addition we are including the cost of a Small EMR Cluster option, detailed below in deployment costs, for the duration of the migration.
 
 ### Example Costs
 
@@ -125,12 +125,14 @@ Before getting started with the migration process, ensure the following is in pl
 3. **git**: Install [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) to clone the sample code repository.
 4. **Source Data**: Identify the existing Amazon S3 bucket and the Glue Data Catalog table that contains the tabular data to migrate.
     - If the source bucket is encrypted with [CMK-KMS](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk), remember to grant the "EMREc2role" created by the CloudFormation template, in the Stack Output, access to the CMK-KMS key prior to running the migration.
-    - This solution supports source AWS Glue Catalog Standard and Apache Iceberg table formats.
+    - This solution supports source AWS Glue Catalog Hive table and Apache Iceberg table formats.
+    - All the source tables must have values for Input format, Output format, and serde serialization lib in AWS Glue Data Catalog. To verify, visit Advanced Properties section for the source table in the catalog.
 5. **Destination S3 Tables**: Determine the Amazon S3 table bucket and namespace/database where tabular data will migrate.
 6. **IAM Permissions**: Ensure you have the necessary IAM permissions to create and manage the required AWS resources, such as CloudFormation stacks, Amazon S3, AWS Glue, Amazon EMR, and AWS Step Functions.
     - If an [AWS Lake Formation](https://aws.amazon.com/lake-formation/) table is referenced, specific Lake Formation permissions (such as SELECT, DESCRIBE) on Glue databases and tables are granted.
-7. **Email**: An active e-mail to subscribe to the Amazon SNS topic that will be used to receive migration status updates.
-8. **S3 bucket for CloudFormation Template (optional for CLI)**: Due to the size of the CloudFormation template, using the AWS CLI requires a bucket to host the template.
+7. **Key pair**: Have access to an existing EC2 Keypair, or create an [EC2 Keypair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/create-key-pairs.html#having-ec2-create-your-key-pair). This is used only in the event there is a need to SSH into the EMR Cluster Nodes, such as troubleshooting.
+8. **Email**: An active e-mail to subscribe to the Amazon SNS topic that will be used to receive migration status updates.
+9. **S3 bucket for CloudFormation Template (optional for CLI)**: Due to the size of the CloudFormation template, using the AWS CLI requires a bucket to host the template.
 
 Once you have these prerequisites in place, you can proceed with the deployment steps outlined in the guidance.
 
@@ -246,6 +248,7 @@ $ vi parameters.json
 | `YourS3Bucket` | Source S3 bucket containing the data to migrate |
 | `YourExistingGlueDatabase` | Source Glue database name |
 | `YourExistingGlueTable` | Source Glue table name |
+| `YourExistingTableType` | Source table format: Standard(Hive) or Iceberg |
 
 #### Destination
 | Parameter | Description |
@@ -310,7 +313,10 @@ If the deployment fails, refer to [Troubleshooting a failed deployment](#trouble
 ### 2. Confirm SNS Subscription
 - Remember to confirm the SNS subscription to the e-mail address selected.
 
-## Running the Guidance
+## Running the Solution Guidance
+
+### Once the CloudFormation stack is completed, follow the steps below to begin migration.
+
 ### 1. Start Step Function Execution
 
 ### Log in to the AWS Management Console
