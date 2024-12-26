@@ -15,6 +15,7 @@ parser.add_argument('--data_migration_type', help="Data Migration type new or in
 parser.add_argument('--data_source_bucket', help="Source data S3 bucket name.")
 parser.add_argument('--data_source_db', help="Source data Glue Database name.")
 parser.add_argument('--data_source_tbl', help="Source data Glue Table name.")
+parser.add_argument('--data_source_type', help="Source data Glue Table Type.")
 parser.add_argument('--data_source_catalog', help="Source DB/TableCatalog.")
 parser.add_argument('--data_destination_s3tables_arn', help="Destination S3 Table ARN.")
 parser.add_argument('--data_destination_catalog', help="Destination S3 Tables Catalog.")
@@ -31,6 +32,7 @@ data_migration_type = args.data_migration_type
 data_source_bucket = args.data_source_bucket
 data_source_db = args.data_source_db
 data_source_tbl = args.data_source_tbl
+data_source_type = args.data_source_type
 data_source_catalog = args.data_source_catalog
 data_destination_catalog = args.data_destination_catalog
 data_destination_s3tables_arn = args.data_destination_s3tables_arn
@@ -74,11 +76,19 @@ def insert_update_action(src_catalog, catalog, src_db, src_tbl, dst_db, dst_tbl)
         sql_query_insert = ''
         # Let's start the INSERT INTO action FOR the earlier CTAS 
         print(f"Initiating INSERT INTO worklow from {src_catalog}.{src_db}.{src_tbl} into {dst_db}.{dst_tbl} please hold...")
-        sql_query_insert = f"""
-        INSERT INTO
-        `{catalog}`.`{dst_db}`.`{dst_tbl}`
-        SELECT * FROM `{src_catalog}`.`{src_db}`.`{src_tbl}`
-        """                
+        # Handle query with or without catalog name provided
+        if src_catalog:
+            sql_query_insert = f"""
+            INSERT INTO
+            `{catalog}`.`{dst_db}`.`{dst_tbl}`
+            SELECT * FROM `{src_catalog}`.`{src_db}`.`{src_tbl}`
+            """ 
+        else:
+            sql_query_insert = f"""
+            INSERT INTO
+            `{catalog}`.`{dst_db}`.`{dst_tbl}`
+            SELECT * FROM `{src_db}`.`{src_tbl}`
+            """                     
 
         # Run the INSERT INTO SQL query
         spark_sql_query_insert = spark.sql(sql_query_insert)
@@ -87,9 +97,6 @@ def insert_update_action(src_catalog, catalog, src_db, src_tbl, dst_db, dst_tbl)
         raise e
     else:
         print(f"INSERT INTO worklow from {src_db}.{src_tbl} into {dst_db}.{dst_tbl} completed!")
-
-
-
 
 
 
@@ -113,22 +120,43 @@ def ctas_action(src_catalog, catalog, src_db, src_tbl, dst_db, dst_tbl, dst_part
         # Check the provided partition name and value for the destination Table
         if dst_partitions:
             if dst_partitions == "NotApplicable":
-                sql_query_d = f"""
-                CREATE TABLE IF NOT EXISTS
-                `{catalog}`.`{dst_db}`.`{dst_tbl}`
-                USING iceberg
-                AS SELECT * FROM `{src_catalog}`.`{src_db}`.`{src_tbl}` 
-                LIMIT 0
-                """
+                # Handle query with or without catalog name provided
+                if src_catalog:
+                    sql_query_d = f"""
+                    CREATE TABLE IF NOT EXISTS
+                    `{catalog}`.`{dst_db}`.`{dst_tbl}`
+                    USING iceberg
+                    AS SELECT * FROM `{src_catalog}`.`{src_db}`.`{src_tbl}` 
+                    LIMIT 0
+                    """
+                else: 
+                    sql_query_d = f"""
+                    CREATE TABLE IF NOT EXISTS
+                    `{catalog}`.`{dst_db}`.`{dst_tbl}`
+                    USING iceberg
+                    AS SELECT * FROM `{src_db}`.`{src_tbl}` 
+                    LIMIT 0
+                    """                               
             else:
-                sql_query_d = f"""
-                CREATE TABLE IF NOT EXISTS
-                `{catalog}`.`{dst_db}`.`{dst_tbl}`
-                USING iceberg
-                PARTITIONED BY {dst_partitions}
-                AS SELECT * FROM `{src_catalog}`.`{src_db}`.`{src_tbl}`
-                LIMIT 0
-                """
+                # Handle query with or without catalog name provided                        
+                if src_catalog: 
+                    sql_query_d = f"""
+                    CREATE TABLE IF NOT EXISTS
+                    `{catalog}`.`{dst_db}`.`{dst_tbl}`
+                    USING iceberg
+                    PARTITIONED BY {dst_partitions}
+                    AS SELECT * FROM `{src_catalog}`.`{src_db}`.`{src_tbl}`
+                    LIMIT 0
+                    """
+                else:
+                    sql_query_d = f"""
+                    CREATE TABLE IF NOT EXISTS
+                    `{catalog}`.`{dst_db}`.`{dst_tbl}`
+                    USING iceberg
+                    PARTITIONED BY {dst_partitions}
+                    AS SELECT * FROM `{src_db}`.`{src_tbl}`
+                    LIMIT 0
+                    """                                
 
         # Run the CTAS SQL query
         spark_sql_query_d = spark.sql(sql_query_d)
@@ -176,17 +204,29 @@ def initiate_workflow():
     try:
         # First let's query the source table
         print(f"Let do a test query of the source table {data_source_db}.{data_source_tbl} to see if we can perform a successful query")
-        query_table_data(data_source_catalog, data_source_db, data_source_tbl)
+        if data_source_type == 'Standard':
+            query_table_data(None, data_source_db, data_source_tbl)
+        elif data_source_type == 'Iceberg':    
+            query_table_data(data_source_catalog, data_source_db, data_source_tbl)
         print(f"Test query of the source table {data_source_db}.{data_source_tbl} is successful proceeding to main task")
         # Choose the CTAS option to create new Amazon S3 Table Bucket destination NameSpace and Table
         if data_migration_type == 'New-Migration':
             print(f"We are performing a new migration, so will use CTAS to create a new table and load data")
-            ctas_action(data_source_catalog, data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
-                        data_destination_s3tables_tbl, data_destination_s3tables_partitions
-                        )
-            # Now that we have successfully created the destination table, let's perform an INSERT INTO
-            insert_update_action(data_source_catalog, data_destination_catalog, data_source_db, data_source_tbl,
-                                data_destination_s3tables_namespace, data_destination_s3tables_tbl)                                    
+            if data_source_type == 'Iceberg':
+                print(f"Source Table type is Hive....")
+                ctas_action(data_source_catalog, data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
+                            data_destination_s3tables_tbl, data_destination_s3tables_partitions
+                            )
+                # Now that we have successfully created the destination table, let's perform an INSERT INTO
+                insert_update_action(data_source_catalog, data_destination_catalog, data_source_db, data_source_tbl,
+                                    data_destination_s3tables_namespace, data_destination_s3tables_tbl)
+            elif data_source_type == 'Standard':
+                ctas_action(None, data_destination_catalog, data_source_db, data_source_tbl, data_destination_s3tables_namespace,
+                            data_destination_s3tables_tbl, data_destination_s3tables_partitions
+                            )
+                # Now that we have successfully created the destination table, let's perform an INSERT INTO
+                insert_update_action(None, data_destination_catalog, data_source_db, data_source_tbl,
+                                    data_destination_s3tables_namespace, data_destination_s3tables_tbl)                                                                                      
 
         # Now we are done with CTAS and INSERT INTO, let's perform some verifications on the destination Table
         # Let's query the destination table
