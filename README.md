@@ -131,6 +131,7 @@ Before getting started with the migration process, ensure the following is in pl
 6. **IAM Permissions**: Ensure you have the necessary IAM permissions to create and manage the required AWS resources, such as CloudFormation stacks, Amazon S3, AWS Glue, Amazon EMR, and AWS Step Functions.
 7. **[AWS Lake Formation](https://aws.amazon.com/lake-formation/)**
     - The IAM user or role deploying the CloudFormation template requires [superuser](https://docs.aws.amazon.com/lake-formation/latest/dg/permissions-reference.html) access to AWS Lake Formation. As part of the solution deployment Lake Formation [PrincipalPermission](https://docs.aws.amazon.com/lake-formation/latest/dg/lf-permissions-reference.html) is created. Specific Lake Formation permissions (such as SELECT, DESCRIBE) on Glue databases and tables are granted. 
+    - These Lake Formation permissions are a **REQUIREMENT** regardless of whether Lake Formation is used.
 8. **Key pair**: Have access to an existing EC2 Keypair, or create an [EC2 Keypair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/create-key-pairs.html#having-ec2-create-your-key-pair). This is used only in the event there is a need to SSH into the EMR Cluster Nodes, such as troubleshooting.
 9. **Email**: An active e-mail to subscribe to the Amazon SNS topic that will be used to receive migration status updates.
 10. **S3 bucket for CloudFormation Template (optional for CLI)**: Due to the size of the CloudFormation template, using the AWS CLI requires a bucket to host the template.
