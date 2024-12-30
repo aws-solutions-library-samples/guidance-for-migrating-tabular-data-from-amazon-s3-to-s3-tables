@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: 2010-09-09
-Description: An Amazon S3 Tables Bucket Migration Solution.
+Description: An Amazon S3 Tables Bucket Migration Solution ( SO9586 ).
 Metadata:
   Version: '1.0.0'
   License:
