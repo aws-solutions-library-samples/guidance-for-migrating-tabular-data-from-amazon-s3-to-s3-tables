@@ -22,7 +22,7 @@
 <a name="overview"></a>
 ## Overview
 
-This user guide is created for anyone who is interested in migrating tabular data from [Amazon S3](https://aws.amazon.com/s3/) general purpose buckets to [Amazon S3 Tables](https://aws.amazon.com/s3/features/tables/). Amazon S3 Tables are purpose-built for storing tables using the [Apache Iceberg](https://iceberg.apache.org/) format. S3 Tables introduce a new bucket type for Apache Iceberg tables that delivers up to 3x faster query performance and up to 10x higher transactions per second compared to storing Iceberg tables in general purpose Amazon S3 buckets. Table buckets allow you to create tables and configure table-level permissions through the [AWS Management Console](https://aws.amazon.com/console/).  With built-in support for Apache Iceberg, query tabular data in S3 with popular engines including [Amazon Athena](https://aws.amazon.com/athena/), [Amazon Redshift](https://aws.amazon.com/pm/redshift/), and [Apache Spark](https://spark.apache.org/). 
+This user guide is created for anyone who is interested in migrating tabular data from [Amazon S3](https://aws.amazon.com/s3/) general purpose buckets to [Amazon S3 Tables](https://aws.amazon.com/s3/features/tables/). Amazon S3 Tables are purpose-built for storing tables using the [Apache Iceberg](https://iceberg.apache.org/) format. S3 Tables introduce a new bucket type for Apache Iceberg tables that delivers up to 3x faster query performance and up to 10x higher transactions per second compared to storing Iceberg tables in general purpose Amazon S3 buckets. With built-in support for Apache Iceberg, query tabular data in S3 with popular engines including [Amazon Athena](https://aws.amazon.com/athena/), [Amazon Redshift](https://aws.amazon.com/pm/redshift/), and [Apache Spark](https://spark.apache.org/). 
 
 This solution sets up an automated migration process for moving tables (Apache Iceberg and Hive tables) registered in [AWS Glue Table Catalog](https://docs.aws.amazon.com/glue/latest/dg/tables-described.html) and stored in Amazon S3 general-purpose buckets to Amazon S3 Table buckets using [AWS Step Functions](https://aws.amazon.com/step-functions/), and [Amazon EMR](https://aws.amazon.com/emr/) with Apache Spark.
 
@@ -321,7 +321,7 @@ If the deployment fails, refer to [Troubleshooting a failed deployment](#trouble
 
 ### 1. Start Step Function Execution
 
-### Log in to the AWS Management Console
+### Log in to the [AWS Management Console](https://aws.amazon.com/console/)
 - Open your web browser and go to https://console.aws.amazon.com/
 
 ### Navigate to AWS CloudFormation
