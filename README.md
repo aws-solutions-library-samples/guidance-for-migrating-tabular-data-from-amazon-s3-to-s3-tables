@@ -139,7 +139,7 @@ Once you have these prerequisites in place, you can proceed with the deployment 
 
 <a name="region"></a>
 ### Region Support
-<i>Supported Regions for S3 Tables as of December 24st, 2024:</i>
+<i>Supported Regions for S3 Tables as of December 24th, 2024:</i>
 
 | Region Name   | Region |
 |--------|-----------------------------|
