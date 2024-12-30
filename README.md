@@ -189,7 +189,7 @@ Available Instance Classes for EMR based upon Size:
 
 ### Deployment Options
 
-- Download the [CF Template](https://raw.githubusercontent.com/aws-solutions-library-samples/guidance-for-migrating-tabular-data-from-amazon-s3-to-s3-tables/refs/heads/main/src/automated-migration-to-s3-tables-latest.yaml?token=GHSAT0AAAAAAC34ARM7XOSDM6A22RFHH3ZWZ3SZMJQ) to your local system, and launch via the [AWS Management CloudFormation Console](https://console.aws.amazon.com/cloudformation).
+- Download the [CF Template](https://github.com/aws-solutions-library-samples/guidance-for-migrating-tabular-data-from-amazon-s3-to-s3-tables/blob/main/src/automated-migration-to-s3-tables-latest.yaml) to your local system, and launch via the [AWS Management CloudFormation Console](https://console.aws.amazon.com/cloudformation).
 - Launch via [AWS CloudShell](https://aws.amazon.com/cloudshell/).
 - Launch via the AWS CLI.
 ---
@@ -202,7 +202,7 @@ Available Instance Classes for EMR based upon Size:
     - Click on "Create stack" (with new resources).
     - Under "Specify template" select "Upload a template file"
         - Click "Choose file"
-        - Upload the [CF Template](https://raw.githubusercontent.com/aws-solutions-library-samples/guidance-for-migrating-tabular-data-from-amazon-s3-to-s3-tables/refs/heads/main/src/automated-migration-to-s3-tables-latest.yaml?token=GHSAT0AAAAAAC34ARM7XOSDM6A22RFHH3ZWZ3SZMJQ) downloaded to your local system.
+        - Upload the [CF Template](https://github.com/aws-solutions-library-samples/guidance-for-migrating-tabular-data-from-amazon-s3-to-s3-tables/blob/main/src/automated-migration-to-s3-tables-latest.yaml) downloaded to your local system.
     - Click "Next".
     - Specify stack details
         - Enter a stack name.
