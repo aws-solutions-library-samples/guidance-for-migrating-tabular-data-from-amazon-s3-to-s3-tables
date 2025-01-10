@@ -152,7 +152,7 @@ Current list of available Regions with S3 Tables support can be found [here](htt
 <a name="emrsizes"></a>
 ### EMR Cluster Sizes
 
-Provided below is the list of EMR Clusters that are deployable from the CloudFormation template. This decision is based off of the organization requirements.
+Provided below is the list of EMR Clusters that are deployable from the CloudFormation template. The cluster sizes are designed to meet general workloads. To get assistance with proper cluster sizing, based upon your migration needs, contact your account team to engage an Analytic specialist.
 
 Available Instance Classes for EMR based upon Size:
 
@@ -182,6 +182,18 @@ Available Instance Classes for EMR based upon Size:
 | Medium | 24G             | 4              | 24G           | 4            | 29            |
 | Large  | 24G             | 3              | 32G           | 4            | 44            |
 | XLarge | 28G             | 4              | 48G           | 4            | 74            |
+
+### Time to Migration
+The below table consists of the migration of [S3 Inventory Logs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-inventory.html) in parquet format, migrated to an S3 Table Bucket. The time listed is the average of three individuals tests. All tests were run in us-east-2.
+
+| Data Size | [EMR Cluster Size](#emr-cluster-sizes) ||||
+|-----------|------------|-----------|------------|-----------|
+|           | Xlarge | Large | Medium | Small |
+| 1 TB      | 00:09:01 | 00:18:46 | 00:23:57 | 01:14:50 |
+| 17 TB     | 02:02:23 | 03:43:03 | 05:00:28 | 19:54:39 |
+| 51 TB     | 05:55:40 | 10:42:45 | 14:47:36 | 60:56:40 |
+
+Cost Estimates are provided [here](docs/COST_EST.md) for the scenarios above. 
 
 <a name="deployment-steps"></a>
 
