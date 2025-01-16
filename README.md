@@ -123,9 +123,21 @@ Before getting started with the migration process, ensure the following is in pl
 2. **AWS CLI**: Ensure the [AWS Command Line Interface (CLI)](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) is installed and configured on your local machine or development environment. The CLI will be used to initiate the CloudFormation deployment. Ensure credentials exist.
 3. **git**: Install [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) to clone the sample code repository.
 4. **Source Data**: Identify the existing Amazon S3 bucket and the Glue Data Catalog table that contains the tabular data to migrate.
+
     - If the source bucket is encrypted with [CMK-KMS](https://docs.aws.amazon.com/kms/latest/developerguide/concepts.html#customer-cmk), remember to grant the "EMREc2role" created by the CloudFormation template, in the Stack Output, access to the CMK-KMS key prior to running the migration.
     - This solution supports source AWS Glue Catalog Hive table and Apache Iceberg table formats.
     - All the source tables must have values for Input format, Output format, and serde serialization lib in AWS Glue Data Catalog. To verify, visit Advanced Properties section for the source table in the catalog.
+<br>
+<details>
+<summary>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<b>TIP:</b> To find the S3 location of the <b>Glue Data Catalog table</b>, use the AWS CLI.</summary>
+
+```bash
+aws glue get-table --database-name DATABASE_NAME --name TABLENAME --query "Table.StorageDescriptor.Location"
+```
+
+</details>
+<br>
+
 5. **Destination S3 Tables**: Determine the Amazon S3 table bucket and namespace/database where tabular data will migrate.
 6. **IAM Permissions**: Ensure you have the necessary IAM permissions to create and manage the required AWS resources, such as CloudFormation stacks, Amazon S3, AWS Glue, Amazon EMR, and AWS Step Functions.
 7. **[AWS Lake Formation](https://aws.amazon.com/lake-formation/)**
