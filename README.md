@@ -196,7 +196,7 @@ Available Instance Classes for EMR based upon Size:
 | XLarge | 28G             | 4              | 48G           | 4            | 74            |
 
 ### Time to Migration
-The below table consists of the migration of [S3 Inventory Logs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-inventory.html) in parquet format, migrated to an S3 Table Bucket. The time listed is the average of three individuals tests. All tests were run in us-east-2.
+The below table consists of the migration of [S3 Inventory Logs](https://docs.aws.amazon.com/AmazonS3/latest/userguide/storage-inventory.html) in parquet format, migrated to an S3 Table Bucket. The time listed is the average of three individuals tests. All tests were run in us-east-2. The average source object size is 70MB.
 
 | Data Size | [EMR Cluster Size](#emr-cluster-sizes) ||||
 |-----------|------------|-----------|------------|-----------|
@@ -206,6 +206,17 @@ The below table consists of the migration of [S3 Inventory Logs](https://docs.aw
 | 51 TB     | 05:55:40 | 10:42:45 | 14:47:36 | 60:56:40 |
 
 Cost Estimates are provided [here](docs/COST_EST.md) for the scenarios above. 
+
+### Additional Testing
+Additional testing was completed in January 2025 on smaller object sizes. In this scenario, the average object size is 1.2 MB with 1TB of total data. There is no partitioning of the data in the Source S3 bucket.
+
+| Data Size | [EMR Cluster Size](#emr-cluster-sizes) ||||
+|-----------|------------|-----------|------------|-----------|
+|           | Xlarge | Large | Medium | Small |
+| 1 TB      | 00:28:53 | 00:43:53 | 01:02:34 | 03:49:07 |
+| % Slower than prior testing | 220% | 134% | 161% | 200% |
+
+The time increase dealing with smaller objects is attributed to increased overhead managing more operations, and task distributions across the cluster. Each object requires its own API calls and processing overhead, regardless of size. This results in more time spent on administrative tasks rather than pure data transfer, leading to the observed 134-220% slowdown across different cluster sizes. The lack of partitioning in the source bucket may also contribute to the decreased performance.
 
 <a name="deployment-steps"></a>
 
