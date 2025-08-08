@@ -252,6 +252,34 @@ The time increase dealing with smaller objects is attributed to increased overhe
         - At the bottom of the page, acknowledge that CloudFormation might create IAM resources (if applicable).
     - Click "Create stack".
 
+
+##### Stack deployment screenshots:
+
+<p align="center">
+<img src="./images/create-new-stack.png" alt="Create new Stack">
+</p>
+
+<p align="center">
+<em>Figure 3. Create new Stack.</em>
+</p>
+
+<p align="center">
+<img src="./images/add-stack-parameters-1.png" alt="Add Stack Parameters view 1">
+</p>
+
+<p align="center">
+<em>Figure 4. Add Stack Parameters view 1.</em>
+</p>
+
+<p align="center">
+<img src="./images/add-stack-parameters-2.png" alt="Add Stack Parameters view 2">
+</p>
+
+<p align="center">
+<em>Figure 5. Add Stack Parameters view 2.</em>
+</p>
+
+
 #### AWS Cloud Shell and CLI
 1. **Clone sample code GitHub repository using the following command:**
 ```
@@ -388,7 +416,7 @@ If the deployment fails, refer to [Troubleshooting a failed deployment](#trouble
 </p>
 
 <p align="center">
-<em>Figure 3. AWS Step Functions Flow Chart - Creating an EMR Cluster.</em>
+<em>Figure 6. AWS Step Functions Flow Chart - Creating an EMR Cluster.</em>
 </p>
 
 <p align="center">
@@ -396,7 +424,7 @@ If the deployment fails, refer to [Troubleshooting a failed deployment](#trouble
 </p>
 
 <p align="center">
-<em>Figure 4. AWS Step Functions Flow Chart - Initiate Table Migration.</em>
+<em>Figure 7. AWS Step Functions Flow Chart - Initiate Table Migration.</em>
 </p>
 
 #### Check execution details
@@ -422,7 +450,7 @@ If the deployment fails, refer to [Troubleshooting a failed deployment](#trouble
 </p>
 
 <p align="center">
-<em>Figure 5. AWS EMR Console - Monitoring Steps.</em>
+<em>Figure 8. AWS EMR Console - Monitoring Steps.</em>
 </p>
 
 <p align="center">
@@ -430,7 +458,7 @@ If the deployment fails, refer to [Troubleshooting a failed deployment](#trouble
 </p>
 
 <p align="center">
-<em>Figure 6. AWS EMR Console - Monitoring Spark Job.</em>
+<em>Figure 9. AWS EMR Console - Monitoring Spark Job.</em>
 </p>
 
 ## Additional Monitoring Tips
